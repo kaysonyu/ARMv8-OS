@@ -6,6 +6,8 @@
 #include <kernel/printk.h>
 
 #define PAGE_NUM PHYSTOP/PAGE_SIZE
+//for test
+// #define PAGE_NUM 2000
 #define ALLOC_SIZE 10
 
 SpinLock mem_lock;
