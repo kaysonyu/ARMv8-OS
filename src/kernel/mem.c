@@ -93,34 +93,27 @@ void kfree(void* p)
     int page_order = int_p[0];
     int size_num = int_p[1];
     u64 test_p = (u64)int_p;
-    // printk("kfree:%d\n", size_num);
     for (int i = size_num; i < ALLOC_SIZE; i++) {
         int count = 0;
         int flag_num = -1;
         for (QueueNode* same_level_p = fetch_all_from_queue(&page_manage[page_order][i]); same_level_p; same_level_p = same_level_p->next) {
-            // printk("bianli:%p\n", same_level_p);
             for_traversal[count] = same_level_p;
             if (((u64)same_level_p ^ (u64)test_p) == (u64)(1 << (i+3))) {
                 flag_num = count;
             }
             count++;  
         } 
-        // printk("flag_num:%d\n", flag_num);
         for (int j = 0; j < count; j++) {
             if (j != flag_num) {
                 add_to_queue(&page_manage[page_order][i], for_traversal[j]);
-                // printk("add:%p\n", for_traversal[j]);
             }     
         }   
         if (flag_num != -1 && i < ALLOC_SIZE-1) {
             u64 merge_p = (test_p < (u64)for_traversal[flag_num]) ? test_p : (u64)for_traversal[flag_num]; 
-            // printk("choose:%p\n", for_traversal[flag_num]);
             test_p = merge_p;
-            // printk("merge:%p\n", (QueueNode*)merge_p);
         } 
         else {
             add_to_queue(&page_manage[page_order][i], (QueueNode*)test_p);
-            // printk("break\n");
             break;
         }
     }
