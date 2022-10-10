@@ -15,7 +15,7 @@ pushp(x4, x5)
 pushp(x2, x3)
 pushp(x0, x1)
 mrs x0, spsr_el1
-msr x1, elr_el1
+mrs x1, elr_el1
 pushp(x0, x1)
 mov x0, sp
 bl trap_global_handler

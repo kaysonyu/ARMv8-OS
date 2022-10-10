@@ -77,7 +77,7 @@ bool activate_proc(struct proc* p)
         return false;
     }
     if (p->state == SLEEPING || p->state == UNUSED) {
-        p->state == RUNNABLE;
+        p->state = RUNNABLE;
         _insert_into_list(&rq, &p->schinfo.rq);
     }
     else {
@@ -95,10 +95,13 @@ static void update_this_state(enum procstate new_state)
     thisproc()->state = new_state;
 }
 
+extern bool panic_flag;
 static struct proc* pick_next()
 {
     // TODO: if using simple_sched, you should implement this routinue
     // choose the next process to run, and return idle if no runnable process
+    if (panic_flag)
+        return cpus[cpuid()].sched.idle;
     _for_in_list(p, &rq) {
         if (p == &rq) {
             continue;

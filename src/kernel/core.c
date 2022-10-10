@@ -3,7 +3,7 @@
 #include <kernel/init.h>
 #include <kernel/sched.h>
 #include <test/test.h>
-#include <driver/sd.h>
+// #include <driver/sd.h>
 
 bool panic_flag;
 

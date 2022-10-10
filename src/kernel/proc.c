@@ -52,7 +52,7 @@ int wait(int* exitcode)
     // 2. wait for childexit
     // 3. if any child exits, clean it up and return its pid and exitcode
     // NOTE: be careful of concurrency
-    auto this = thisproc();
+    // auto this = thisproc();
     (void)exitcode;
     return 0;
     
@@ -89,7 +89,7 @@ void init_proc(struct proc* p)
     _acquire_spinlock(&plock);
     p->pid = ++pid;
     _release_spinlock(&plock);
-    init_sem(&p->childexit, 1);
+    init_sem(&p->childexit, 0);
     init_list_node(&p->children);
     init_list_node(&p->ptnode);
     p->kstack = kalloc_page();
