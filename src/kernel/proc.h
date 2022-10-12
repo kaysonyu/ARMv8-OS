@@ -23,7 +23,7 @@ typedef struct KernelContext
 
 } KernelContext;
 
-struct proc
+typedef struct proc
 {
     bool killed;
     bool idle;
@@ -38,7 +38,7 @@ struct proc
     void* kstack;
     UserContext* ucontext;
     KernelContext* kcontext;
-};
+} proc;
 
 // void init_proc(struct proc*);
 struct proc* create_proc();

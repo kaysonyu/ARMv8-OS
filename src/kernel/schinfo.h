@@ -17,5 +17,6 @@ struct schinfo
 {
     // TODO: customize your sched info
     ListNode rq;
-    
+    u64 start_;
+    u64 occupy_;
 };

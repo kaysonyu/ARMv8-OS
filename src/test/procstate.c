@@ -37,6 +37,7 @@ static void proc_test_1b(u64 a)
 
 static void proc_test_1a(u64 a)
 {
+    printk("a:%lld\n", a);
     for (int i = 0; i < 10; i++)
     {
         auto p = create_proc();
@@ -50,6 +51,7 @@ static void proc_test_1a(u64 a)
         for (int i = 0; i < 10; i++)
         {
             wait(&x);
+            printk("t=%d\n", t);
             t |= 1 << (x - 10);
         }
         ASSERT(t == 1023);
@@ -122,6 +124,7 @@ static void proc_test_1()
 void proc_test()
 {
     printk("proc_test\n");
+    printk("addr:%p %p %p %p %p %p\n", &s1, &s2, &s3, &s4, &s5, &s6);
     auto p = create_proc();
     int pid = start_proc(p, proc_test_1, 0);
     int t = 0;
