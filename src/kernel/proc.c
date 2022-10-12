@@ -138,7 +138,7 @@ void init_proc(struct proc* p)
     memset(p, 0, sizeof(*p));
     _acquire_spinlock(&plock);
     p->pid = alloc_pid();
-    printk("PID:%d\n", p->pid);
+    // printk("PID:%d\n", p->pid);
     _release_spinlock(&plock);
     init_sem(&p->childexit, 0);
     init_list_node(&p->children);
