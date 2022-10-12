@@ -77,7 +77,6 @@ void post_sem(Semaphore* sem)
         wait->up = true;
         _detach_from_list(&wait->slnode);
         activate_proc(wait->proc);
-        // printk("post\n");
     }
     release_spinlock(0, &sem->lock);
 }

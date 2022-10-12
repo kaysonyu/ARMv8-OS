@@ -8,7 +8,6 @@
 #include <driver/clock.h>
 
 extern bool panic_flag;
-int length;
 
 extern void swtch(KernelContext* new_ctx, KernelContext** old_ctx);
 
@@ -81,8 +80,6 @@ bool activate_proc(struct proc* p)
     if (p->state == SLEEPING || p->state == UNUSED) {
         p->state = RUNNABLE;
         _insert_into_list(&rq, &p->schinfo.rq);
-        // printk("+1:%d\n", p->pid);
-        length++;
         // _merge_list(&rq, &p->schinfo.rq);
     }
     else {
@@ -101,8 +98,6 @@ static void update_this_state(enum procstate new_state)
     auto this = thisproc();
     if (new_state == SLEEPING || new_state == ZOMBIE) {
         _detach_from_list(&(this->schinfo.rq));
-        length--;
-        // printk("-1\n");
     }
     else if (new_state == RUNNABLE && this != cpus[cpuid()].sched.idle) {
         bool exist_flag = false;
@@ -114,8 +109,6 @@ static void update_this_state(enum procstate new_state)
         }
         if (!exist_flag) {
             _insert_into_list(&rq, &(this -> schinfo.rq));
-            // printk("+1\n");
-            length++;
         }    
     }
     (this -> schinfo).occupy_ += get_timestamp() - (this -> schinfo).start_;
@@ -133,21 +126,6 @@ static struct proc* pick_next()
     proc* next_proc = cpus[cpuid()].sched.idle;
     if (panic_flag)
         return cpus[cpuid()].sched.idle;
-    // auto p1 = &rq;
-    // for (int i = 0; i < 40; i++) {
-    //     printk("bianli : %p\n", p1);
-    //     p1 = p1 -> next;
-    // }
-    // printk("qian:%p\n", rq.prev);
-    int num = 0;
-    printk("PID:( ");
-    _for_in_list(p, &rq) {
-        if (p != &rq) {
-            printk("%d,", container_of(p, proc, schinfo.rq)->pid);
-            num++;
-        }
-    }
-    printk(")   NUM:%d\n", num);
     _for_in_list(p, &rq) {
         if (p == &rq) {
             continue;
@@ -172,7 +150,7 @@ static void update_this_proc(struct proc* p)
 {
     // TODO: if using simple_sched, you should implement this routinue
     // update thisproc to the choosen process, and reset the clock interrupt if need
-    reset_clock(1000000000);
+    reset_clock(1000);
     cpus[cpuid()].sched.thisproc = p;
     p -> schinfo.start_ = get_timestamp();
 }
@@ -181,13 +159,12 @@ static void update_this_proc(struct proc* p)
 // You are allowed to replace it with whatever you like.
 static void simple_sched(enum procstate new_state)
 {
-    // printk("length:%d\n", length);
     auto this = thisproc();
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
-    printk("pid: %d, new_state: %d\n", this->pid, new_state);
+    // printk("pid: %d, new_state: %d\n", this->pid, new_state);
     auto next = pick_next();
-    printk("pid_new: %d\n\n", next->pid);
+    // printk("pid_new: %d\n\n", next->pid);
     update_this_proc(next);
     ASSERT(next->state == RUNNABLE);
     next->state = RUNNING;

@@ -38,10 +38,10 @@ NO_RETURN void exit(int code)
     // 3. transfer children to the root_proc, and notify the root_proc if there is zombie
     // 4. sched(ZOMBIE)
     // NOTE: be careful of concurrency
-    // _acquire_spinlock(&plock);
+    _acquire_spinlock(&plock);
     auto this = thisproc();
     this -> exitcode = code;
-    printk("exit: code: %d\n", code);
+    // printk("exit: code: %d\n", code);
 
     while (!_empty_list(&(this -> children))) {
         ListNode* child_node = (this -> children).next; 
@@ -57,12 +57,11 @@ NO_RETURN void exit(int code)
         }
     }
     // _release_spinlock(&plock);
-    setup_checker(checker);
-    lock_for_sched(checker);
-    sched(checker, ZOMBIE);
-    // printk("succ\n");
-    // _sched(ZOMBIE);
-    
+    post_sem(&(this -> parent ->childexit));
+    _acquire_sched_lock();
+    _release_spinlock(&plock);
+    _sched(ZOMBIE);
+    // _release_sched_lock();
     PANIC(); // prevent the warning of 'no_return function returns'
 }
 
@@ -73,15 +72,16 @@ int wait(int* exitcode)
     // 2. wait for childexit
     // 3. if any child exits, clean it up and return its pid and exitcode
     // NOTE: be careful of concurrency
-    // _acquire_spinlock(&plock);
     auto this = thisproc();
     if (_empty_list(&(this -> children))) {
-        _release_spinlock(&plock);
+        // _release_spinlock(&plock);
         return -1;
     }
 
     wait_sem(&(this -> childexit));
 
+    _acquire_spinlock(&plock);
+    int w_pid = 0;
     _for_in_list(child_node, &(this -> children)) {
         if (child_node == &(this -> children)) {
             continue;
@@ -95,17 +95,17 @@ int wait(int* exitcode)
 
             *exitcode = child_proc -> exitcode;
     
-            int w_pid = child_proc -> pid;
+            w_pid = child_proc -> pid;
             // printk("waitPid:%d\n", w_pid);
-            printk("wait_code: %d pid: %d\n", *exitcode, w_pid);
+            // printk("wait_code: %d pid: %d\n", *exitcode, w_pid);
             kfree_page(child_proc -> kstack);
             kfree(child_proc);
-            _release_spinlock(&plock);
-            return w_pid;
+            break;
+            // _release_spinlock(&plock);
         }
     }
-    // _release_spinlock(&plock);
-    return 0;
+    _release_spinlock(&plock);
+    return w_pid;
 }
 
 int start_proc(struct proc* p, void(*entry)(u64), u64 arg)
@@ -137,10 +137,6 @@ void init_proc(struct proc* p)
     memset(p, 0, sizeof(*p));
     _acquire_spinlock(&plock);
     p->pid = ++pid;
-    // printk("%d\n", pid);
-    // if (pid == 102) {
-    //     printk("102:%p\n\n", p);
-    // }
     _release_spinlock(&plock);
     init_sem(&p->childexit, 0);
     init_list_node(&p->children);

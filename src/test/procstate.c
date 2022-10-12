@@ -30,7 +30,7 @@ static void proc_test_1b(u64 a)
             wait_sem(&s2);
         break;
     case 8: wait_sem(&s3); post_sem(&s4); break;
-    case 9: post_sem(&s5); wait_sem(&s6); break;
+    case 9: post_sem(&s5); wait_sem(&s6); break; 
     }
     exit(a);
 }
@@ -124,7 +124,6 @@ static void proc_test_1()
 void proc_test()
 {
     printk("proc_test\n");
-    printk("addr:%p %p %p %p %p %p\n", &s1, &s2, &s3, &s4, &s5, &s6);
     auto p = create_proc();
     int pid = start_proc(p, proc_test_1, 0);
     int t = 0;
