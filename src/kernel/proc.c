@@ -5,13 +5,13 @@
 #include <common/list.h>
 #include <common/string.h>
 #include <kernel/printk.h>
+#include <kernel/pid.h>
 
 struct proc root_proc;
 
 void kernel_entry();
 void proc_entry();
 
-static int pid;
 static SpinLock plock;
 
 define_early_init(plock) {
@@ -98,6 +98,7 @@ int wait(int* exitcode)
             w_pid = child_proc -> pid;
             // printk("waitPid:%d\n", w_pid);
             // printk("wait_code: %d pid: %d\n", *exitcode, w_pid);
+            free_pid(w_pid);
             kfree_page(child_proc -> kstack);
             kfree(child_proc);
             break;
@@ -136,7 +137,8 @@ void init_proc(struct proc* p)
     // NOTE: be careful of concurrency
     memset(p, 0, sizeof(*p));
     _acquire_spinlock(&plock);
-    p->pid = ++pid;
+    p->pid = alloc_pid();
+    printk("PID:%d\n", p->pid);
     _release_spinlock(&plock);
     init_sem(&p->childexit, 0);
     init_list_node(&p->children);
