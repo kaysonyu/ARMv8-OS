@@ -5,121 +5,117 @@
 #include <driver/memlayout.h>
 #include <kernel/printk.h>
 
-#define PAGE_NUM PHYSTOP/PAGE_SIZE
-//for test
-// #define PAGE_NUM 2000
-#define ALLOC_SIZE 10
-
 SpinLock mem_lock;
-
 RefCount alloc_page_cnt;
 
-define_early_init(alloc_page_cnt)
-{
+define_early_init(alloc_page_cnt) {
     init_rc(&alloc_page_cnt);
 }
 
 static QueueNode* pages;
-QueueNode* page_manage [PAGE_NUM][ALLOC_SIZE];
-QueueNode* for_traversal [PAGE_NUM];
 extern char end[];
-define_early_init(pages)
-{   
-    for (u64 i = 0; i < PAGE_NUM; i++)
-        for (u64 j = 0; j < ALLOC_SIZE; j++)
-            page_manage[i][j] = NULL;
 
+kmem_cache_t caches[SLAB_MAX + 1]; //4~11
+
+define_early_init(pages) {   
     for (u64 p = PAGE_BASE((u64)&end) + PAGE_SIZE; p < P2K(PHYSTOP); p += PAGE_SIZE) {
         add_to_queue(&pages, (QueueNode*)p);  
-    }        
+    } 
+    for (u32 i = 0; i <= SLAB_MAX; i++) {
+        caches[i].order = i;
+        init_list_node(&(caches[i].slabs_full));
+        init_list_node(&(caches[i].slabs_partial));
+    }       
 }
 
-int log2_8(isize size) {
-    int log_result;
-    for (log_result = 0; log_result < 13 && (1 << log_result) < size; log_result++) {}
-    return log_result > 3 ? log_result - 3 : 0;
-}
-
-void* kalloc_page()
-{
+void* kalloc_page() {
     _increment_rc(&alloc_page_cnt);
     return fetch_from_queue(&pages);
 }
 
-void kfree_page(void* p)
-{
+void kfree_page(void* p) {
     _decrement_rc(&alloc_page_cnt);
     add_to_queue(&pages, (QueueNode*)p);
 }
 
-void* kalloc(isize size)
-{
-    _acquire_spinlock(&mem_lock);
-    int size_num = log2_8(size+8);
-    static int page_count = 0;
-    bool flag = false;
-    int page_order, size_order;
-    for (int i = 0; i < PAGE_NUM && !flag; i++) {
-        for (int j = size_num; j < ALLOC_SIZE && !flag; j++) {
-            if (page_manage[i][j] != NULL) {
-                page_order = i;
-                size_order = j;
-                flag = true;
-            }
-        }
-    }
-    if (!flag) {
-        add_to_queue(&page_manage[page_count][ALLOC_SIZE-1], kalloc_page());
-        page_order = page_count;
-        size_order = ALLOC_SIZE-1;
-        flag = true;
-        page_count++;
-    }
-   
-    u64 p = (u64)fetch_from_queue(&page_manage[page_order][size_order]);
-    for (int i = size_order-1; i >= size_num; i--) {
-        add_to_queue(&page_manage[page_order][i], (QueueNode*)(p+(1<<i)*8));
-    }
-    ((int*)p)[0] = page_order;
-    ((int*)p)[1] = size_num;
-    _release_spinlock(&mem_lock);
-    return (QueueNode*)(p+8);
-
+int log2_(isize size) {
+    u32 log_result;
+    for (log_result = 4; log_result < 13 && (1 << log_result) < size; log_result++) {}
+    return log_result;
 }
 
-void kfree(void* p)
-{   
-    _acquire_spinlock(&mem_lock);
-    int* int_p = ((int*)p) - 2;
-    int page_order = int_p[0];
-    int size_num = int_p[1];
-    u64 test_p = (u64)int_p;
-    for (int i = size_num; i < ALLOC_SIZE; i++) {
-        int count = 0;
-        int flag_num = -1;
-        for (QueueNode* same_level_p = fetch_all_from_queue(&page_manage[page_order][i]); same_level_p; same_level_p = same_level_p->next) {
-            for_traversal[count] = same_level_p;
-            if (((u64)same_level_p ^ (u64)test_p) == (u64)(1 << (i+3))) {
-                flag_num = count;
-            }
-            count++;  
-        } 
-        for (int j = 0; j < count; j++) {
-            if (j != flag_num) {
-                add_to_queue(&page_manage[page_order][i], for_traversal[j]);
-            }     
-        }   
-        if (flag_num != -1 && i < ALLOC_SIZE-1) {
-            u64 merge_p = (test_p < (u64)for_traversal[flag_num]) ? test_p : (u64)for_traversal[flag_num]; 
-            test_p = merge_p;
-        } 
-        else {
-            add_to_queue(&page_manage[page_order][i], (QueueNode*)test_p);
-            break;
-        }
+void* init_slab(u32 order) {
+    slab_t* new_slab = kalloc_page();
+    new_slab -> used = 0;
+    init_list_node(&new_slab -> next_slab);
+    init_list_node(&new_slab -> s_mem);
+    new_slab -> parent = &caches[order];
+
+    for (ListNode* p = (ListNode*)(new_slab + 1); (u64)p < (u64)(new_slab) + PAGE_SIZE - (1 << order); p = (ListNode*)((u64)p + (1 << order))){
+        _insert_into_list(&(new_slab -> s_mem), p);
     }
-    if (page_manage[page_order][ALLOC_SIZE-1] != NULL) {
-        kfree_page(fetch_from_queue(&page_manage[page_order][ALLOC_SIZE-1]));
+
+    ListNode* obj = new_slab -> s_mem.next;
+    _detach_from_list(obj);
+    new_slab -> used++;
+
+    if (new_slab -> s_mem.next == &new_slab -> s_mem) {
+        _insert_into_list(&caches[order].slabs_full, &new_slab -> next_slab);
+    } 
+    else {
+        _insert_into_list(&caches[order].slabs_partial, &new_slab -> next_slab);
+    }
+    return obj;
+}
+
+void* find_in_slab(u32 order, bool* is_find) {
+    ListNode* obj = 0;
+    _for_in_list(slab_node, &caches[order].slabs_partial) {
+        if (slab_node == &caches[order].slabs_partial) continue;
+
+        slab_t* slab_ = container_of(slab_node, slab_t, next_slab);
+        
+        obj = slab_ -> s_mem.next;
+        _detach_from_list(obj);
+        slab_ -> used++;
+
+        *is_find = true;
+
+        if (slab_ -> s_mem.next == &slab_ -> s_mem) {
+            _detach_from_list(&slab_ -> next_slab);
+            _insert_into_list(&caches[order].slabs_full, &slab_ -> next_slab);
+        }  
+
+        break;
+    }
+
+    return obj;
+}
+
+void* kalloc(isize size) {
+    _acquire_spinlock(&mem_lock);
+    u32 order = log2_(size);
+    ListNode* obj;
+    bool found = false;
+    obj = find_in_slab(order, &found);
+    if (!found) obj = init_slab(order);
+    _release_spinlock(&mem_lock);
+    return (void*)obj;
+}
+
+void kfree(void* p) {   
+    _acquire_spinlock(&mem_lock);
+
+    slab_t* slab_handle = (slab_t*)((u64)p >> 12 << 12);
+    _insert_into_list(&slab_handle -> s_mem, (ListNode*)p);
+    slab_handle -> used--;
+
+    _detach_from_list(&slab_handle -> next_slab);
+    _insert_into_list(&slab_handle -> parent -> slabs_partial, &slab_handle -> next_slab);
+
+    if (slab_handle -> used == 0) {
+        _detach_from_list(&slab_handle -> next_slab);
+        kfree_page((void*)slab_handle);
     }
     _release_spinlock(&mem_lock);
 }
