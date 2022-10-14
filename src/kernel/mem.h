@@ -21,6 +21,6 @@ typedef struct kmem_cache {
 typedef struct slab {
     kmem_cache_t* parent;
     u32 used;
-    ListNode s_mem;
-    ListNode next_slab;
+    ListNode objs;
+    ListNode ptNode;
 } slab_t;
