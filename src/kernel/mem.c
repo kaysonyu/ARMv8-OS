@@ -106,18 +106,17 @@ void* kalloc(isize size) {
 void kfree(void* p) {   
     _acquire_spinlock(&mem_lock);
 
-    slab_t* slab_handle = (slab_t*)((u64)p >> 12 << 12);
-    _insert_into_list(&slab_handle -> objs, (ListNode*)p);
-    slab_handle -> used--;
+    slab_t* target_slab = (slab_t*)((u64)p >> 12 << 12);
+    _insert_into_list(&target_slab -> objs, (ListNode*)p);
+    target_slab -> used--;
 
-    _detach_from_list(&slab_handle -> ptNode);
-    
-    if (slab_handle -> used == 0) {
-        kfree_page((void*)slab_handle);
+    _detach_from_list(&target_slab -> ptNode);
+
+    if (target_slab -> used == 0) {
+        kfree_page((void*)target_slab);
     }
     else {
-        _insert_into_list(&slab_handle -> parent -> slabs_partial, &slab_handle -> ptNode);
+        _insert_into_list(&target_slab -> parent -> slabs_partial, &target_slab -> ptNode);
     }
-    
     _release_spinlock(&mem_lock);
 }
