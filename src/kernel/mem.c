@@ -47,23 +47,23 @@ int log2_(isize size) {
 void* init_slab(u32 order) {
     slab_t* new_slab = kalloc_page();
     new_slab -> used = 0;
-    init_list_node(&new_slab -> next_slab);
-    init_list_node(&new_slab -> s_mem);
+    init_list_node(&new_slab -> ptNode);
+    init_list_node(&new_slab -> objs);
     new_slab -> parent = &caches[order];
 
     for (ListNode* p = (ListNode*)(new_slab + 1); (u64)p < (u64)(new_slab) + PAGE_SIZE - (1 << order); p = (ListNode*)((u64)p + (1 << order))){
-        _insert_into_list(&(new_slab -> s_mem), p);
+        _insert_into_list(&(new_slab -> objs), p);
     }
 
-    ListNode* obj = new_slab -> s_mem.next;
+    ListNode* obj = new_slab -> objs.next;
     _detach_from_list(obj);
     new_slab -> used++;
 
-    if (new_slab -> s_mem.next == &new_slab -> s_mem) {
-        _insert_into_list(&caches[order].slabs_full, &new_slab -> next_slab);
+    if (new_slab -> objs.next == &new_slab -> objs) {
+        _insert_into_list(&caches[order].slabs_full, &new_slab -> ptNode);
     } 
     else {
-        _insert_into_list(&caches[order].slabs_partial, &new_slab -> next_slab);
+        _insert_into_list(&caches[order].slabs_partial, &new_slab -> ptNode);
     }
     return obj;
 }
@@ -73,17 +73,17 @@ void* find_in_slab(u32 order, bool* is_find) {
     _for_in_list(slab_node, &caches[order].slabs_partial) {
         if (slab_node == &caches[order].slabs_partial) continue;
 
-        slab_t* slab_ = container_of(slab_node, slab_t, next_slab);
+        slab_t* slab_ = container_of(slab_node, slab_t, ptNode);
         
-        obj = slab_ -> s_mem.next;
+        obj = slab_ -> objs.next;
         _detach_from_list(obj);
         slab_ -> used++;
 
         *is_find = true;
 
-        if (slab_ -> s_mem.next == &slab_ -> s_mem) {
-            _detach_from_list(&slab_ -> next_slab);
-            _insert_into_list(&caches[order].slabs_full, &slab_ -> next_slab);
+        if (slab_ -> objs.next == &slab_ -> objs) {
+            _detach_from_list(&slab_ -> ptNode);
+            _insert_into_list(&caches[order].slabs_full, &slab_ -> ptNode);
         }  
 
         break;
@@ -107,14 +107,14 @@ void kfree(void* p) {
     _acquire_spinlock(&mem_lock);
 
     slab_t* slab_handle = (slab_t*)((u64)p >> 12 << 12);
-    _insert_into_list(&slab_handle -> s_mem, (ListNode*)p);
+    _insert_into_list(&slab_handle -> objs, (ListNode*)p);
     slab_handle -> used--;
 
-    _detach_from_list(&slab_handle -> next_slab);
-    _insert_into_list(&slab_handle -> parent -> slabs_partial, &slab_handle -> next_slab);
+    _detach_from_list(&slab_handle -> ptNode);
+    _insert_into_list(&slab_handle -> parent -> slabs_partial, &slab_handle -> ptNode);
 
     if (slab_handle -> used == 0) {
-        _detach_from_list(&slab_handle -> next_slab);
+        _detach_from_list(&slab_handle -> ptNode);
         kfree_page((void*)slab_handle);
     }
     _release_spinlock(&mem_lock);
