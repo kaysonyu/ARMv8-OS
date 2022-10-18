@@ -92,7 +92,7 @@ bool activate_proc(struct proc* p)
         // _merge_list(&rq, &p->schinfo.rq);
     }
     else {
-        PANIC();
+        return false;
     }
     _release_sched_lock();
     return true;
@@ -169,6 +169,7 @@ static void update_this_proc(struct proc* p)
 static void simple_sched(enum procstate new_state)
 {
     auto this = thisproc();
+    if (this -> killed && new_state != ZOMBIE) return;
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
     // printk("pid: %d, new_state: %d\n", this->pid, new_state);
@@ -177,8 +178,7 @@ static void simple_sched(enum procstate new_state)
     update_this_proc(next);
     ASSERT(next->state == RUNNABLE);
     next->state = RUNNING;
-    if (next != this)
-    {
+    if (next != this) {
         swtch(next->kcontext, &this->kcontext);
     }
     _release_sched_lock();

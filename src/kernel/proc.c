@@ -110,12 +110,30 @@ int wait(int* exitcode)
     return w_pid;
 }
 
-int kill(int pid)
-{
+proc* traverse_proc(proc *p, int pid) {   
+    struct task_struct *child;
+    struct list_head *list;
+ 
+    _for_in_list(child_node, &p -> children) {
+        proc* child = container_of(child_node, proc, children);
+        if (child -> pid == pid && !is_unused(child)) return child;
+        traverse_proc(child, pid);
+    }
+
+    return NULL;
+}
+
+int kill(int pid) {
     // TODO
     // Set the killed flag of the proc to true and return 0.
     // Return -1 if the pid is invalid (proc not found).
-    
+    proc* target_proc = traverse_proc(&root_proc, pid);
+    if (target_proc == NULL) return -1;
+
+    target_proc -> killed = true;
+    activate_proc(target_proc);
+
+    return 0;
 }
 
 int start_proc(struct proc* p, void(*entry)(u64), u64 arg)

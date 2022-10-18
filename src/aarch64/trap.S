@@ -20,6 +20,7 @@ pushp(x0, x1)
 mov x0, sp
 bl trap_global_handler
 
+
 .global trap_return
 trap_return:
 // TODO

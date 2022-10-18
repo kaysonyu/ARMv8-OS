@@ -31,8 +31,14 @@ void free_pid(int pid) {
     pidmap.free_num++;
 }
 
-define_init(pidmap)
-{
+// bool find_pid(int pid) {
+//     int *p = ((int*)(&pidmap.map)) + (pid >> 5);
+//     int mask = 1 << (pid & 31);
+//     if (*p & mask != 0) return true;
+//     return false;
+// }
+
+define_init(pidmap) {
     pidmap.free_num = PID_MAX;
     memset(pidmap.map, 0, 4096);
 }
