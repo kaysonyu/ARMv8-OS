@@ -13,6 +13,6 @@ void syscall_entry(UserContext* context)
     u64 id = 0, ret = 0;
     if (id < NR_SYSCALL)
     {
-        
+        printk("%p, %lld\n", context, ret);
     }
 }

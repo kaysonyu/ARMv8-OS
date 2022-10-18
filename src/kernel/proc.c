@@ -44,6 +44,8 @@ NO_RETURN void exit(int code)
     this -> exitcode = code;
     // printk("exit: code: %d\n", code);
 
+    free_pgdir(&(this->pgdir));
+
     while (!_empty_list(&(this -> children))) {
         ListNode* child_node = (this -> children).next; 
         _detach_from_list(child_node);
@@ -111,9 +113,6 @@ int wait(int* exitcode)
 }
 
 proc* traverse_proc(proc *p, int pid) {   
-    struct task_struct *child;
-    struct list_head *list;
- 
     _for_in_list(child_node, &p -> children) {
         proc* child = container_of(child_node, proc, children);
         if (child -> pid == pid && !is_unused(child)) return child;
@@ -165,7 +164,7 @@ void init_proc(struct proc* p)
     memset(p, 0, sizeof(*p));
     _acquire_spinlock(&plock);
     p->pid = alloc_pid();
-    // printk("PID:%d\n", p->pid);
+    
     _release_spinlock(&plock);
     init_sem(&p->childexit, 0);
     init_list_node(&p->children);
@@ -173,6 +172,8 @@ void init_proc(struct proc* p)
     p->kstack = kalloc_page();
     init_schinfo(&p->schinfo);
     p->state = UNUSED;
+    p->killed = false;
+    init_pgdir(&(p->pgdir));
     p->kcontext = (KernelContext*)((u64)p->kstack + PAGE_SIZE - 16 - sizeof(KernelContext) - sizeof(UserContext));
     p->ucontext = (UserContext*)((u64)p->kstack + PAGE_SIZE - 16 -sizeof(UserContext));
 }

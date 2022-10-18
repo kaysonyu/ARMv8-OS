@@ -169,12 +169,12 @@ static void update_this_proc(struct proc* p)
 static void simple_sched(enum procstate new_state)
 {
     auto this = thisproc();
-    if (this -> killed && new_state != ZOMBIE) return;
+    // if (this -> killed && new_state != ZOMBIE) return;
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
-    // printk("pid: %d, new_state: %d\n", this->pid, new_state);
+    printk("pid: %d, new_state: %d\n", this->pid, new_state);
     auto next = pick_next();
-    // printk("pid_new: %d\n\n", next->pid);
+    printk("pid_new: %d\n\n", next->pid);
     update_this_proc(next);
     ASSERT(next->state == RUNNABLE);
     next->state = RUNNING;

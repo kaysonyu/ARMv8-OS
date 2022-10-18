@@ -1,8 +1,10 @@
 #include <kernel/pid.h>
 #include <kernel/init.h>
 #include <common/string.h>
+#include <kernel/printk.h>
 
 int alloc_pid() {
+    printk("!!!!!!!!!!!!!!!!!\n");
     if (!pidmap.free_num) {
         return -1;
     }
@@ -18,6 +20,7 @@ int alloc_pid() {
     }
     if (pid_ < PID_MAX) {
         pidmap.free_num--;
+        printk("PID:%d\n", pid_);
         return pid_;
     }
     return -1;
