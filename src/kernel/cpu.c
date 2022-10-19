@@ -78,6 +78,11 @@ static void hello(struct timer* t)
     set_cpu_timer(&hello_timer[cpuid()]);
 }
 
+struct timer sched_timer[4];
+void sched_of_t() {
+    yield();
+}
+
 void set_cpu_on() {
     ASSERT(!_arch_disable_trap());
     // disable the lower-half address to prevent stupid errors
@@ -92,6 +97,10 @@ void set_cpu_on() {
     hello_timer[cpuid()].elapse = 5000;
     hello_timer[cpuid()].handler = hello;
     set_cpu_timer(&hello_timer[cpuid()]);
+
+    sched_timer[cpuid()].elapse = 1;
+    sched_timer[cpuid()].handler = sched_of_t;
+    set_cpu_timer(&sched_timer[cpuid()]);
 }
 
 void set_cpu_off() {

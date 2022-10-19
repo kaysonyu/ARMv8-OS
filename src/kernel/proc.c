@@ -99,8 +99,6 @@ int wait(int* exitcode)
             *exitcode = child_proc -> exitcode;
     
             w_pid = child_proc -> pid;
-            // printk("waitPid:%d\n", w_pid);
-            // printk("wait_code: %d pid: %d\n", *exitcode, w_pid);
             free_pid(w_pid);
             kfree_page(child_proc -> kstack);
             kfree(child_proc);
@@ -112,13 +110,19 @@ int wait(int* exitcode)
     return w_pid;
 }
 
-proc* traverse_proc(proc *p, int pid) {   
+proc* traverse_proc(proc *p, int pid) {  
     _for_in_list(child_node, &p -> children) {
-        proc* child = container_of(child_node, proc, children);
-        if (child -> pid == pid && !is_unused(child)) return child;
-        traverse_proc(child, pid);
+        if (child_node == &p -> children) continue;
+        proc* child = container_of(child_node, proc, ptnode);
+        if (child -> pid == pid) 
+            return child;
+        else {
+            proc* obj = traverse_proc(child, pid);
+            if (obj != NULL) {
+                return obj;
+            }
+        }    
     }
-
     return NULL;
 }
 
@@ -126,12 +130,17 @@ int kill(int pid) {
     // TODO
     // Set the killed flag of the proc to true and return 0.
     // Return -1 if the pid is invalid (proc not found).
+    _acquire_spinlock(&plock);
     proc* target_proc = traverse_proc(&root_proc, pid);
-    if (target_proc == NULL) return -1;
+    if (target_proc == NULL || is_unused(target_proc)) {
+        _release_spinlock(&plock);
+        return -1;
+    }
 
     target_proc -> killed = true;
     activate_proc(target_proc);
 
+    _release_spinlock(&plock);
     return 0;
 }
 
@@ -164,7 +173,6 @@ void init_proc(struct proc* p)
     memset(p, 0, sizeof(*p));
     _acquire_spinlock(&plock);
     p->pid = alloc_pid();
-    
     _release_spinlock(&plock);
     init_sem(&p->childexit, 0);
     init_list_node(&p->children);

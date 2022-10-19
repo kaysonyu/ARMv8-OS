@@ -4,7 +4,6 @@
 #include <kernel/printk.h>
 
 int alloc_pid() {
-    printk("!!!!!!!!!!!!!!!!!\n");
     if (!pidmap.free_num) {
         return -1;
     }
@@ -20,7 +19,6 @@ int alloc_pid() {
     }
     if (pid_ < PID_MAX) {
         pidmap.free_num--;
-        printk("PID:%d\n", pid_);
         return pid_;
     }
     return -1;
@@ -33,13 +31,6 @@ void free_pid(int pid) {
     *p = *p & ~mask;
     pidmap.free_num++;
 }
-
-// bool find_pid(int pid) {
-//     int *p = ((int*)(&pidmap.map)) + (pid >> 5);
-//     int mask = 1 << (pid & 31);
-//     if (*p & mask != 0) return true;
-//     return false;
-// }
 
 define_init(pidmap) {
     pidmap.free_num = PID_MAX;

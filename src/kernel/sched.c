@@ -14,6 +14,8 @@ extern void swtch(KernelContext* new_ctx, KernelContext** old_ctx);
 static SpinLock rqlock;
 static ListNode rq;
 
+extern struct timer sched_timer[4];
+
 define_early_init(rq) {
     init_spinlock(&rqlock);
     init_list_node(&rq);
@@ -23,6 +25,7 @@ define_init(sched) {
     for (int i = 0; i < NCPU; i++) {
         struct proc* p = kalloc(sizeof(struct proc));
         p->idle = 1;
+        p->killed = false;
         p->state = RUNNING;
         cpus[i].sched.thisproc = cpus[i].sched.idle = p;
     }
@@ -89,7 +92,6 @@ bool activate_proc(struct proc* p)
     if (p->state == SLEEPING || p->state == UNUSED) {
         p->state = RUNNABLE;
         _insert_into_list(&rq, &p->schinfo.rq);
-        // _merge_list(&rq, &p->schinfo.rq);
     }
     else {
         return false;
@@ -103,7 +105,6 @@ static void update_this_state(enum procstate new_state)
 {
     // TODO: if using simple_sched, you should implement this routinue
     // update the state of current process to new_state, and remove it from the sched queue if new_state=SLEEPING/ZOMBIE
-    // _acquire_sched_lock();
     auto this = thisproc();
     if (new_state == SLEEPING || new_state == ZOMBIE) {
         _detach_from_list(&(this->schinfo.rq));
@@ -122,7 +123,6 @@ static void update_this_state(enum procstate new_state)
     }
     (this -> schinfo).occupy_ += get_timestamp() - (this -> schinfo).start_;
     this -> state = new_state;
-    // _release_sched_lock();
 }
 
 extern bool panic_flag;
@@ -143,7 +143,6 @@ static struct proc* pick_next()
         auto proc = container_of(p, struct proc, schinfo.rq);
         // printk("pid_all: %d\n", proc->pid);
         if (proc->state == RUNNABLE) {
-            // printk("proc: %p %d\n", proc, (cpus[cpuid()].sched.idle==proc));
             int occupy_time = (proc -> schinfo).occupy_;
             if (min_ == -1 || (occupy_time < min_)) {
                 min_ = occupy_time;
@@ -151,6 +150,7 @@ static struct proc* pick_next()
             }
         }
     }
+    // _detach_from_list(&next_proc -> schinfo.rq);
     // _release_sched_lock();
     return next_proc;
 }
@@ -159,7 +159,10 @@ static void update_this_proc(struct proc* p)
 {
     // TODO: if using simple_sched, you should implement this routinue
     // update thisproc to the choosen process, and reset the clock interrupt if need
-    reset_clock(1000);
+    // reset_clock(1000);
+    if (!sched_timer[cpuid()].triggered) cancel_cpu_timer(&sched_timer[cpuid()]);
+    set_cpu_timer(&sched_timer[cpuid()]);
+
     cpus[cpuid()].sched.thisproc = p;
     p -> schinfo.start_ = get_timestamp();
 }
@@ -169,16 +172,19 @@ static void update_this_proc(struct proc* p)
 static void simple_sched(enum procstate new_state)
 {
     auto this = thisproc();
-    // if (this -> killed && new_state != ZOMBIE) return;
+    if (this -> killed && new_state != ZOMBIE) {
+        _release_sched_lock();
+        return;
+    }
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
-    printk("pid: %d, new_state: %d\n", this->pid, new_state);
     auto next = pick_next();
-    printk("pid_new: %d\n\n", next->pid);
+    // printk("this.pid:%d, next.pid:%d\n", this->pid, next->pid);
     update_this_proc(next);
     ASSERT(next->state == RUNNABLE);
     next->state = RUNNING;
     if (next != this) {
+        attach_pgdir(&(next -> pgdir));
         swtch(next->kcontext, &this->kcontext);
     }
     _release_sched_lock();

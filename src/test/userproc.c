@@ -71,7 +71,7 @@ void user_proc_test()
             *get_pte(&p->pgdir, 0x400000 + q - (u64)loop_start, true) = K2P(q) | PTE_USER_DATA;
         }
         ASSERT(p->pgdir.pt);
-        p->ucontext->x0 = i;
+        p->ucontext->x[0] = i;
         p->ucontext->elr = 0x400000;
         // p->ucontext->ttbr0 = K2P(p->pgdir.pt);
         p->ucontext->spsr = 0;
