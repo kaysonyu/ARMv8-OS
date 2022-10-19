@@ -28,6 +28,7 @@ typedef struct proc
 {
     bool killed;
     bool idle;
+    bool uproc;
     int pid;
     int exitcode;
     enum procstate state;
