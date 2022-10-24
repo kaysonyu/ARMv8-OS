@@ -30,7 +30,7 @@ static void proc_test_1b(u64 a)
             wait_sem(&s2);
         break;
     case 8: wait_sem(&s3); post_sem(&s4); break;
-    case 9: post_sem(&s5); wait_sem(&s6); break;
+    case 9: post_sem(&s5); wait_sem(&s6); break; 
     }
     exit(a);
 }
