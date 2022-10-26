@@ -80,7 +80,10 @@ int wait(int* exitcode)
         return -1;
     }
 
-    wait_sem(&(this -> childexit));
+    bool sig = wait_sem(&(this -> childexit));
+    if (sig == false) {
+        return -2;
+    }
 
     _acquire_spinlock(&plock);
     int w_pid = 0;

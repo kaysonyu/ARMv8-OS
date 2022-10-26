@@ -175,8 +175,9 @@ void sd_intr() {
      *
      * TODO: Lab5 driver.
      */
-    if (!buf_queue.sz) return;
-
+    if (!buf_queue.sz) {
+        PANIC();
+    }
     _acquire_spinlock(&sd_lock);
     buf* b = container_of(buf_queue.begin, buf, node); 
     if (b -> flags & B_DIRTY) {
@@ -185,7 +186,7 @@ void sd_intr() {
         // } 
         sdWaitForInterrupt(INT_DATA_DONE);
         b -> flags = (b -> flags & ~B_DIRTY) | B_VALID;
-        
+
     }
     else if (~b -> flags & B_VALID) {
         // if (sdWaitForInterrupt(INT_READ_RDY)) {
@@ -208,13 +209,11 @@ void sd_intr() {
     queue_lock(&buf_queue);
     _release_spinlock(&sd_lock);
     queue_pop(&buf_queue);
-    queue_unlock(&buf_queue);
-
     arch_dsb_sy();
-
     if (buf_queue.sz) {
         sd_start(container_of(buf_queue.begin, buf, node));
     }
+    queue_unlock(&buf_queue);
     
 }
 
@@ -228,17 +227,19 @@ void sdrw(buf* b) {
      * sd_start(), wait_sem() to complete this function.
      *  TODO: Lab5 driver.
      */
-    if (!buf_queue.sz) {
-        sd_start(b);
-    }
+    int old_flag = b -> flags;
     arch_dsb_sy();
-
-    queue_lock(&buf_queue);
-    queue_push(&buf_queue, &b -> node);
-    queue_unlock(&buf_queue);
-
-    init_sem(&b -> sl, 0);
-    wait_sem(&b -> sl);
+    while (old_flag == b -> flags) {
+        queue_lock(&buf_queue);
+        queue_push(&buf_queue, &b -> node);
+        arch_dsb_sy();
+        if (buf_queue.sz == 1) {
+            sd_start(b);
+        }   
+        queue_unlock(&buf_queue);
+        init_sem(&b -> sl, 0);
+        wait_sem(&b -> sl);
+    }
 }
 
 /* SD card test and benchmark. */
