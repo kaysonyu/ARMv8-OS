@@ -18,6 +18,8 @@
 #define SD_READ_BLOCKS 0
 #define SD_WRITE_BLOCKS 1
 
+#define PE2_ADDR 0x1ce
+
 void sd_init();
 void sd_intr();
 void sd_test();
