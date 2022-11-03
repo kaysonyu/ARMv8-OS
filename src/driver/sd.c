@@ -230,6 +230,7 @@ void sdrw(buf* b) {
     int old_flag = b -> flags;
     arch_dsb_sy();
     while (old_flag == b -> flags) {
+        init_sem(&b -> sl, 0);
         queue_lock(&buf_queue);
         queue_push(&buf_queue, &b -> node);
         arch_dsb_sy();
@@ -237,7 +238,6 @@ void sdrw(buf* b) {
             sd_start(b);
         }   
         queue_unlock(&buf_queue);
-        init_sem(&b -> sl, 0);
         wait_sem(&b -> sl);
     }
 }
