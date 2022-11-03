@@ -66,7 +66,6 @@ void user_proc_test()
     for (int i = 0; i < 22; i++)
     {
         auto p = create_proc();
-        p->uproc = true;
         for (u64 q = (u64)loop_start; q < (u64)loop_end; q += PAGE_SIZE)
         {
             *get_pte(&p->pgdir, 0x400000 + q - (u64)loop_start, true) = K2P(q) | PTE_USER_DATA;
