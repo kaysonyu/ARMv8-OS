@@ -140,7 +140,7 @@ int kill(int pid) {
     }
 
     target_proc -> killed = true;
-    activate_proc(target_proc);
+    alert_proc(target_proc);
 
     _release_spinlock(&plock);
     return 0;

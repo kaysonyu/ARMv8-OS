@@ -89,7 +89,7 @@ bool _activate_proc(struct proc* p, bool onalert)
         _release_sched_lock();
         return false;
     }
-    if (p->state == SLEEPING || p->state == UNUSED) {
+    else if (p->state == SLEEPING || p->state == UNUSED || (p->state == DEEPSLEEPING && !onalert)) {
         p->state = RUNNABLE;
         _insert_into_list(&rq, &p->schinfo.rq);
     }
@@ -106,7 +106,7 @@ static void update_this_state(enum procstate new_state)
     // TODO: if using simple_sched, you should implement this routinue
     // update the state of current process to new_state, and remove it from the sched queue if new_state=SLEEPING/ZOMBIE
     auto this = thisproc();
-    if (new_state == SLEEPING || new_state == ZOMBIE) {
+    if (new_state == SLEEPING || new_state == ZOMBIE || new_state == DEEPSLEEPING) {
         _detach_from_list(&(this->schinfo.rq));
     }
     else if (new_state == RUNNABLE && this != cpus[cpuid()].sched.idle) {
