@@ -238,7 +238,7 @@ void sdrw(buf* b) {
             sd_start(b);
         }   
         queue_unlock(&buf_queue);
-        wait_sem(&b -> sl);
+        unalertable_wait_sem(&b -> sl);
     }
 }
 
