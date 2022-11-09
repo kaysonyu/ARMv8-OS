@@ -216,19 +216,17 @@ static void cache_sync(OpContext* ctx, Block* block) {
 static void cache_end_op(OpContext* ctx) {
     // TODO
     _acquire_spinlock(&log.lock);
-    bool commit_flag = false;
     log.outstanding--;
     log.real_use -= ctx->rm;
         
     if(log.outstanding == 0) {
-        commit_flag = true;
         log.committing = true;
     } 
     else {
         post_all_sem(&sem);
     }
     
-    if (commit_flag) {
+    if (log.committing) {
         // _acquire_spinlock(&log.lock_2);
         //write_log
         for (usize i = 0; i < log.header.num_blocks; i++) {
@@ -303,7 +301,6 @@ static usize cache_alloc(OpContext* ctx) {
             u8 m = 1 << (j % 8);
             if (!(bp_b->data[j / 8] & m)) {
                 bp_b->data[j / 8] |= m;
-                arch_dsb_sy();
                 cache_sync(ctx, bp_b);
                 cache_release(bp_b);
                 Block* target_b = cache_acquire(i + j);

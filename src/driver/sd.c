@@ -211,10 +211,13 @@ void sd_intr() {
     queue_pop(&buf_queue);
     arch_dsb_sy();
     if (buf_queue.sz) {
+        queue_unlock(&buf_queue);
+        _acquire_spinlock(&sd_lock);
         sd_start(container_of(buf_queue.begin, buf, node));
+        _release_spinlock(&sd_lock);
+        return;
     }
     queue_unlock(&buf_queue);
-    
 }
 
 void sdrw(buf* b) {
@@ -235,9 +238,14 @@ void sdrw(buf* b) {
         queue_push(&buf_queue, &b -> node);
         arch_dsb_sy();
         if (buf_queue.sz == 1) {
+            queue_unlock(&buf_queue);
+            _acquire_spinlock(&sd_lock);
             sd_start(b);
+            _release_spinlock(&sd_lock);
         }   
-        queue_unlock(&buf_queue);
+        else {
+            queue_unlock(&buf_queue);
+        }
         unalertable_wait_sem(&b -> sl);
     }
 }
