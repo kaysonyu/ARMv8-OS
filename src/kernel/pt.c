@@ -21,24 +21,24 @@ PTEntriesPtr get_pte(struct pgdir* pgdir, u64 va, bool alloc)
     }
 
     pt1 = (PTEntriesPtr)(P2K(PTE_ADDRESS(pt0[VA_PART0(va)])));
-    if (pt0[VA_PART0(va)] == NULL && !alloc) return NULL;
-    if (pt0[VA_PART0(va)] == NULL) {
+    if (!IS_VALID(pt0[VA_PART0(va)]) && !alloc) return NULL;
+    if (!IS_VALID(pt0[VA_PART0(va)])) {
         pt1 = kalloc_page();
         memset(pt1, 0, PAGE_SIZE); 
         pt0[VA_PART0(va)] = K2P(pt1) | PTE_TABLE;
     }
 
     pt2 = (PTEntriesPtr)(P2K(PTE_ADDRESS(pt1[VA_PART1(va)])));
-    if (pt1[VA_PART1(va)] == NULL && !alloc) return NULL;
-    if (pt1[VA_PART1(va)] == NULL) {
+    if (!IS_VALID(pt1[VA_PART1(va)]) && !alloc) return NULL;
+    if (!IS_VALID(pt1[VA_PART1(va)])) {
         pt2 = kalloc_page();
         memset(pt2, 0, PAGE_SIZE); 
         pt1[VA_PART1(va)] = K2P(pt2) | PTE_TABLE;
     }
 
     pt3 = (PTEntriesPtr)(P2K(PTE_ADDRESS(pt2[VA_PART2(va)])));
-    if (pt2[VA_PART2(va)] == NULL && !alloc) return NULL;
-    if (pt2[VA_PART2(va)] == NULL) {
+    if (!IS_VALID(pt2[VA_PART2(va)]) && !alloc) return NULL;
+    if (!IS_VALID(pt2[VA_PART2(va)])) {
         pt3 = kalloc_page();
         memset(pt3, 0, PAGE_SIZE); 
         pt2[VA_PART2(va)] = K2P(pt3) | PTE_TABLE;

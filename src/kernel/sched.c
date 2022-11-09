@@ -94,6 +94,7 @@ bool _activate_proc(struct proc* p, bool onalert)
         _insert_into_list(&rq, &p->schinfo.rq);
     }
     else {
+        _release_sched_lock();
         return false;
     }
     _release_sched_lock();

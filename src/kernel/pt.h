@@ -2,6 +2,8 @@
 
 #include <aarch64/mmu.h>
 
+#define IS_VALID(va) ((u64)va & PTE_VALID)
+
 struct pgdir
 {
     PTEntriesPtr pt;

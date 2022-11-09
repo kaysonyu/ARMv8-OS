@@ -33,6 +33,7 @@ typedef struct {
 typedef struct {
     usize rm;
     usize ts;
+    Semaphore sem;
     // hint: you may want to add something else here.
 } OpContext;
 
