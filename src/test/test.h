@@ -9,5 +9,6 @@ void ipc_test();
 void vm_test();
 void container_test();
 void user_proc_test();
+void sd_test();
 unsigned rand();
 void srand(unsigned seed);

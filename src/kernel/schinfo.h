@@ -7,6 +7,8 @@ struct proc; // dont include proc.h here
 struct sched
 {
     // TODO: customize your sched info
+    struct proc* thisproc;
+    struct proc* idle;
 
 };
 
@@ -14,7 +16,9 @@ struct sched
 struct schinfo
 {
     // TODO: customize your sched info
-    
+    ListNode rq;
+    u64 start_;
+    u64 occupy_;
 };
 
 // embedded data for containers
