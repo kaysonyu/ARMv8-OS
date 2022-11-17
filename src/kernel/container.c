@@ -30,7 +30,8 @@ void init_container(struct container* container)
 struct container* create_container(void (*root_entry)(), u64 arg)
 {
     // TODO
-    
+    (*root_entry)(arg);
+    return NULL;
 }
 
 define_early_init(root_container)

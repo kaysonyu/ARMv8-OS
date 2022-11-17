@@ -42,7 +42,7 @@ void init_schinfo(struct schinfo* p, bool group)
 {
     // TODO: initialize your customized schinfo for every newly-created process
     init_list_node(&p -> rq);
-    p -> start_ = get_timestamp();
+    p -> start_ = 0;
     p -> occupy_ = 0;
 }
 

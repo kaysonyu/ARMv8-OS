@@ -6,8 +6,10 @@
 #include <common/string.h>
 #include <kernel/printk.h>
 #include <kernel/pid.h>
+#include <kernel/container.h>
 
 struct proc root_proc;
+extern struct container root_container;
 
 void kernel_entry();
 void proc_entry();
@@ -180,6 +182,7 @@ void init_proc(struct proc* p)
     init_sem(&p->childexit, 0);
     init_list_node(&p->children);
     init_list_node(&p->ptnode);
+    p->container = &root_container;
     p->kstack = kalloc_page();
     init_schinfo(&p->schinfo);
     p->state = UNUSED;
