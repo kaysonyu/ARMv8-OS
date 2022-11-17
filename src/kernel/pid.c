@@ -7,7 +7,7 @@ int alloc_pid() {
     if (!pidmap.free_num) {
         return -1;
     }
-    int pid_ = 0;
+    int pid_ = 1;
     int *p; int mask;
     while (pid_ < PID_MAX) {
         p = ((int*)(&pidmap.map)) + (pid_ >> 5);
