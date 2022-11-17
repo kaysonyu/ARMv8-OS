@@ -73,9 +73,9 @@ static void _create_user_proc(int i)
         *get_pte(&p->pgdir, 0x400000 + q - (u64)loop_start, true) = K2P(q) | PTE_USER_DATA;
     }
     ASSERT(p->pgdir.pt);
-    p->ucontext->x0 = i;
+    p->ucontext->x[0] = i;
     p->ucontext->elr = 0x400000;
-    p->ucontext->ttbr0 = K2P(p->pgdir.pt);
+    // p->ucontext->ttbr0 = K2P(p->pgdir.pt);
     p->ucontext->spsr = 0;
     pids[i] = p->pid;
     set_parent_to_this(p);

@@ -113,20 +113,8 @@ static void update_this_state(enum procstate new_state)
     // TODO: if using simple_sched, you should implement this routinue
     // update the state of current process to new_state, and remove it from the sched queue if new_state=SLEEPING/ZOMBIE
     auto this = thisproc();
-    if (new_state == SLEEPING || new_state == ZOMBIE || new_state == DEEPSLEEPING) {
-        _detach_from_list(&(this->schinfo.rq));
-    }
-    else if (new_state == RUNNABLE && this != cpus[cpuid()].sched.idle) {
-        bool exist_flag = false;
-        _for_in_list(p, &rq) {
-            if (p == &rq) continue;
-            if (p == &(this -> schinfo.rq)) {
-                exist_flag = true;
-            }
-        }
-        if (!exist_flag) {
-            _insert_into_list(&rq, &(this -> schinfo.rq));
-        }    
+    if (new_state == RUNNABLE && this != cpus[cpuid()].sched.idle) {
+            _insert_into_list(&rq, &(this -> schinfo.rq));    
     }
     (this -> schinfo).occupy_ += get_timestamp() - (this -> schinfo).start_;
     this -> state = new_state;
@@ -157,7 +145,9 @@ static struct proc* pick_next()
             }
         }
     }
-    // _detach_from_list(&next_proc -> schinfo.rq);
+    if (next_proc != cpus[cpuid()].sched.idle) {
+        _detach_from_list(&(next_proc -> schinfo.rq));
+    }
     // _release_sched_lock();
     return next_proc;
 }
