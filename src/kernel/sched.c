@@ -6,29 +6,36 @@
 #include <aarch64/intrinsic.h>
 #include <kernel/cpu.h>
 #include <driver/clock.h>
+#include <kernel/container.h>
 
 extern bool panic_flag;
+extern struct container root_container;
 
 extern void swtch(KernelContext* new_ctx, KernelContext** old_ctx);
 
 static SpinLock rqlock;
-static ListNode rq;
+// static ListNode rq;
 
 extern struct timer sched_timer[4];
 
 define_early_init(rq) {
     init_spinlock(&rqlock);
-    init_list_node(&rq);
+    // init_list_node(&rq);
 }
 
 define_init(sched) {
     for (int i = 0; i < NCPU; i++) {
         struct proc* p = kalloc(sizeof(struct proc));
         p->idle = 1;
+        p->pid = 0;
         p->killed = false;
         p->state = RUNNING;
         cpus[i].sched.thisproc = cpus[i].sched.idle = p;
     }
+}
+
+void init_schqueue(struct schqueue* queue) {
+    init_list_node(&queue->rq);
 }
 
 struct proc* thisproc()
@@ -44,6 +51,7 @@ void init_schinfo(struct schinfo* p, bool group)
     init_list_node(&p -> rq);
     p -> start_ = 0;
     p -> occupy_ = 0;
+    p -> iscontainer = group;
 }
 
 void _acquire_sched_lock()
@@ -91,7 +99,7 @@ bool _activate_proc(struct proc* p, bool onalert)
     }
     else if (p->state == SLEEPING || p->state == UNUSED || (p->state == DEEPSLEEPING && !onalert)) {
         p->state = RUNNABLE;
-        _insert_into_list(&rq, &p->schinfo.rq);
+        _insert_into_list(&p->container->schqueue.rq, &p->schinfo.rq);
     }
     else {
         _release_sched_lock();
@@ -105,7 +113,9 @@ bool _activate_proc(struct proc* p, bool onalert)
 void activate_group(struct container* group)
 {
     // TODO: add the schinfo node of the group to the schqueue of its parent
-
+    _acquire_sched_lock();
+    _insert_into_list(&group->parent->schqueue.rq, &group->schinfo.rq);
+    _release_sched_lock();
 }
 
 static void update_this_state(enum procstate new_state)
@@ -114,11 +124,74 @@ static void update_this_state(enum procstate new_state)
     // update the state of current process to new_state, and remove it from the sched queue if new_state=SLEEPING/ZOMBIE
     auto this = thisproc();
     if (new_state == RUNNABLE && this != cpus[cpuid()].sched.idle) {
-            _insert_into_list(&rq, &(this -> schinfo.rq));    
+        _insert_into_list(&this->container->schqueue.rq, &(this -> schinfo.rq));    
     }
-    (this -> schinfo).occupy_ += get_timestamp() - (this -> schinfo).start_;
     this -> state = new_state;
+
+    if (this == cpus[cpuid()].sched.idle) {
+        return;
+    }
+
+    int now_occupy = get_timestamp() - (this -> schinfo).start_;
+    (this -> schinfo).occupy_ += now_occupy;
+    struct container* parent = this->container;
+    while (parent != &root_container) {
+        parent->schinfo.occupy_ += now_occupy;
+        parent = parent->parent;
+    }
 }
+
+bool not_empty_container(struct container* container) {  
+    _for_in_list(child_node, &container->schqueue.rq) {
+        if (child_node == &container->schqueue.rq) continue;
+
+        struct schinfo* schinfo = container_of(child_node, struct schinfo, rq);
+        // auto schunit = (schinfo->iscontainer) ? container_of(child_node, struct container, schinfo.rq) : container_of(child_node, struct proc, schinfo.rq);
+
+        if (schinfo->iscontainer) {
+            return not_empty_container(container_of(schinfo, struct container, schinfo));
+        }
+        else {
+            return true;
+        }
+    }
+    return false;
+}
+
+proc* traverse_queue(struct container* container) { 
+    // struct proc* schproc = NULL;
+    // struct container* schcontainer = NULL;
+    int min_ = -1;
+    struct schinfo* next_schinfo = NULL;
+    _for_in_list(p, &container->schqueue.rq) {
+        if (p == &container->schqueue.rq) {
+            continue;
+        }
+        struct schinfo* schinfo = container_of(p, struct schinfo, rq);
+        // auto schunit = (schinfo->iscontainer) ? container_of(p, struct container, schinfo.rq) : container_of(p, struct proc, schinfo.rq);
+        // printk("pid_all: %d\n", proc->pid);
+        if (schinfo->iscontainer && !not_empty_container(container_of(schinfo, struct container, schinfo)))   {
+            continue;
+        }
+
+        int occupy_time = schinfo->occupy_;
+        if (min_ == -1 || (occupy_time < min_)) {
+            min_ = occupy_time;
+            next_schinfo = schinfo;
+        }
+    }
+
+    if (next_schinfo == NULL) {
+        return NULL;
+    }
+    if (next_schinfo->iscontainer) {
+        return traverse_queue(container_of(next_schinfo, struct container, schinfo));
+    }
+    else {
+        return container_of(next_schinfo, struct proc, schinfo);
+    }
+}
+
 
 extern bool panic_flag;
 static struct proc* pick_next()
@@ -126,26 +199,13 @@ static struct proc* pick_next()
     // TODO: if using simple_sched, you should implement this routinue
     // choose the next process to run, and return idle if no runnable process
     // _acquire_sched_lock();
-    int min_ = -1;
-    proc* next_proc = cpus[cpuid()].sched.idle;
     if (panic_flag)
         return cpus[cpuid()].sched.idle;
-    _for_in_list(p, &rq) {
-        if (p == &rq) {
-            continue;
-        }
-        
-        auto proc = container_of(p, struct proc, schinfo.rq);
-        // printk("pid_all: %d\n", proc->pid);
-        if (proc->state == RUNNABLE) {
-            int occupy_time = (proc -> schinfo).occupy_;
-            if (min_ == -1 || (occupy_time < min_)) {
-                min_ = occupy_time;
-                next_proc = proc;
-            }
-        }
+    struct proc* next_proc = traverse_queue(&root_container);
+    if (next_proc == NULL) {
+        next_proc = cpus[cpuid()].sched.idle;
     }
-    if (next_proc != cpus[cpuid()].sched.idle) {
+    else {
         _detach_from_list(&(next_proc -> schinfo.rq));
     }
     // _release_sched_lock();
@@ -162,6 +222,12 @@ static void update_this_proc(struct proc* p)
 
     cpus[cpuid()].sched.thisproc = p;
     p -> schinfo.start_ = get_timestamp();
+
+    // struct container* parent = thisproc()->container;
+    // while (parent != &root_container) {
+    //     parent->schinfo.start_ = p->schinfo.start_;
+    //     parent = parent->parent;
+    // }
 }
 
 // A simple scheduler.
@@ -169,10 +235,12 @@ static void update_this_proc(struct proc* p)
 static void simple_sched(enum procstate new_state)
 {
     auto this = thisproc();
+    // printk("ppp\n");
     if (this -> killed && new_state != ZOMBIE) {
         _release_sched_lock();
         return;
     }
+    // printk("ppp\n");
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
     auto next = pick_next();

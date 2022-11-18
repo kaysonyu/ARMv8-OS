@@ -17,6 +17,7 @@ struct schinfo
 {
     // TODO: customize your sched info
     ListNode rq;
+    bool iscontainer;
     u64 start_;
     u64 occupy_;
 };
@@ -25,5 +26,5 @@ struct schinfo
 struct schqueue
 {
     // TODO: customize your sched queue
-    
+    ListNode rq;
 };

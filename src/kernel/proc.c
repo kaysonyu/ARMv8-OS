@@ -5,7 +5,6 @@
 #include <common/list.h>
 #include <common/string.h>
 #include <kernel/printk.h>
-#include <kernel/pid.h>
 #include <kernel/container.h>
 
 struct proc root_proc;
@@ -43,6 +42,7 @@ NO_RETURN void exit(int code)
     // NOTE: be careful of concurrency
     _acquire_spinlock(&plock);
     auto this = thisproc();
+    ASSERT(this != this->container->rootproc && !this->idle);
     this -> exitcode = code;
 
     free_pgdir(&(this->pgdir));
@@ -53,7 +53,7 @@ NO_RETURN void exit(int code)
         
         proc* child_proc = container_of(child_node, proc, ptnode);
         // printk("child_node: %p, child_proc: %p, pid: %d\n", child_node, child_proc, child_proc->pid);
-        child_proc -> parent = &root_proc;
+        child_proc -> parent = child_proc -> container -> rootproc;
         _insert_into_list(&(root_proc.children), &(child_proc -> ptnode));
 
         if (is_zombie(child_proc)) {
@@ -101,9 +101,12 @@ int wait(int* exitcode, int* pid)
             _detach_from_list(child_node);
 
             *exitcode = child_proc -> exitcode;
+            *pid = child_proc -> pid;
     
-            w_pid = child_proc -> pid;
-            free_pid(w_pid);
+            w_pid = child_proc -> localpid;
+
+            free_pid(&child_proc->container->localpidmap, child_proc -> localpid);
+            free_pid(&pidmap, child_proc -> pid);
             kfree_page(child_proc -> kstack);
             kfree(child_proc);
             break;
@@ -164,9 +167,10 @@ int start_proc(struct proc* p, void(*entry)(u64), u64 arg)
     p->kcontext->lr = (u64)&proc_entry;
     p->kcontext->x0 = (u64)entry;
     p->kcontext->x1 = (u64)arg;
-    int id = p->pid;
+    p->localpid = alloc_pid(&p->container->localpidmap);
+    // printk("pid:%d\n", p->localpid);
     activate_proc(p);
-    return id;
+    return p->localpid;
 }
 
 void init_proc(struct proc* p)
@@ -175,27 +179,29 @@ void init_proc(struct proc* p)
     // setup the struct proc with kstack and pid allocated
     // NOTE: be careful of concurrency
     memset(p, 0, sizeof(*p));
-    _acquire_spinlock(&plock);
-    p->pid = alloc_pid();
+    p->killed = false;
+    p->pid = alloc_pid(&pidmap);
     // printk("PID:%d\n", p->pid);
-    _release_spinlock(&plock);
+    p->state = UNUSED;
     init_sem(&p->childexit, 0);
     init_list_node(&p->children);
     init_list_node(&p->ptnode);
-    p->container = &root_container;
-    p->kstack = kalloc_page();
-    init_schinfo(&p->schinfo);
-    p->state = UNUSED;
-    p->killed = false;
+    init_schinfo(&p->schinfo, false);
     init_pgdir(&(p->pgdir));
+    p->container = &root_container;
+    // printk("%p=====%d\n", p->container, (p->container==NULL));
+    p->kstack = kalloc_page();
     p->kcontext = (KernelContext*)((u64)p->kstack + PAGE_SIZE - 16 - sizeof(KernelContext) - sizeof(UserContext));
     p->ucontext = (UserContext*)((u64)p->kstack + PAGE_SIZE - 16 -sizeof(UserContext));
 }
 
 struct proc* create_proc()
 {
+    // printk("ooo\n");
     struct proc* p = kalloc(sizeof(struct proc));
+    // printk("ooo\n");
     init_proc(p);
+    // printk("ooo\n");
     return p;
 }
 
