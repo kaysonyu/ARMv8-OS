@@ -3,10 +3,11 @@
 #include <common/spinlock.h>
 
 #define PID_MAX 0x1000
+#define MAP_SIZE 512
  
 typedef struct {
     unsigned int free_num;
-    char map[512];
+    char map[MAP_SIZE];
     SpinLock pidlock;
 } pidmap_t;
 

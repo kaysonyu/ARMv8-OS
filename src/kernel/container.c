@@ -33,7 +33,7 @@ void init_container(struct container* container)
     init_spinlock(&container->localpidmap.pidlock);
     _acquire_spinlock(&container->localpidmap.pidlock);
     container->localpidmap.free_num = PID_MAX;
-    memset(container->localpidmap.map, 0, 512);
+    memset(container->localpidmap.map, 0, MAP_SIZE);
     _release_spinlock(&container->localpidmap.pidlock);
 }
 
@@ -54,6 +54,7 @@ struct container* create_container(void (*root_entry)(), u64 arg)
     // printk("donee\n");
     set_parent_to_this(rootproc);
     container->rootproc = rootproc;
+    rootproc->container = container;
 
     // printk("donee\n");
     

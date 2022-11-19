@@ -124,7 +124,7 @@ static void update_this_state(enum procstate new_state)
     // update the state of current process to new_state, and remove it from the sched queue if new_state=SLEEPING/ZOMBIE
     auto this = thisproc();
     if (new_state == RUNNABLE && this != cpus[cpuid()].sched.idle) {
-        _insert_into_list(&this->container->schqueue.rq, &(this -> schinfo.rq));    
+        _insert_into_list(&this->container->schqueue.rq, &(this -> schinfo.rq)); 
     }
     this -> state = new_state;
 
@@ -142,20 +142,25 @@ static void update_this_state(enum procstate new_state)
 }
 
 bool not_empty_container(struct container* container) {  
+    bool not_empty_flag = false;
     _for_in_list(child_node, &container->schqueue.rq) {
         if (child_node == &container->schqueue.rq) continue;
 
-        struct schinfo* schinfo = container_of(child_node, struct schinfo, rq);
+        struct schinfo* schinfo_ = container_of(child_node, struct schinfo, rq);
         // auto schunit = (schinfo->iscontainer) ? container_of(child_node, struct container, schinfo.rq) : container_of(child_node, struct proc, schinfo.rq);
 
-        if (schinfo->iscontainer) {
-            return not_empty_container(container_of(schinfo, struct container, schinfo));
+        if (schinfo_->iscontainer) {
+            not_empty_flag = not_empty_container(container_of(&schinfo_->rq, struct container, schinfo.rq));
         }
         else {
-            return true;
+            not_empty_flag = true;
+        }
+
+        if (not_empty_flag) {
+            break;
         }
     }
-    return false;
+    return not_empty_flag;
 }
 
 proc* traverse_queue(struct container* container) { 
@@ -167,17 +172,17 @@ proc* traverse_queue(struct container* container) {
         if (p == &container->schqueue.rq) {
             continue;
         }
-        struct schinfo* schinfo = container_of(p, struct schinfo, rq);
+        struct schinfo* schinfo_ = container_of(p, struct schinfo, rq);
         // auto schunit = (schinfo->iscontainer) ? container_of(p, struct container, schinfo.rq) : container_of(p, struct proc, schinfo.rq);
         // printk("pid_all: %d\n", proc->pid);
-        if (schinfo->iscontainer && !not_empty_container(container_of(schinfo, struct container, schinfo)))   {
+        if (schinfo_->iscontainer && !not_empty_container(container_of(&schinfo_->rq, struct container, schinfo.rq)))   {
             continue;
         }
 
-        int occupy_time = schinfo->occupy_;
+        int occupy_time = schinfo_->occupy_;
         if (min_ == -1 || (occupy_time < min_)) {
             min_ = occupy_time;
-            next_schinfo = schinfo;
+            next_schinfo = schinfo_;
         }
     }
 
