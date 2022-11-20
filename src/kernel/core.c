@@ -25,8 +25,8 @@ NO_RETURN void kernel_entry() {
     printk("hello world %d\n", (int)sizeof(struct proc));
 
     // alloc_test();
-    // proc_test();
-    // user_proc_test();
+    proc_test();
+    user_proc_test();
     container_test();
     // sd_test();
     

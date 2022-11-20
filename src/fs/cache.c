@@ -7,7 +7,8 @@
 
 static const SuperBlock* sblock;
 static const BlockDevice* device;
-Semaphore sem;
+Semaphore begin_sem;
+Semaphore end_sem;
 
 // static SpinLock lock;     // protects block cache.
 // static ListNode head;     // the list of all allocated in-memory block.
@@ -162,15 +163,15 @@ static void cache_begin_op(OpContext* ctx) {
     while (1) {
         _acquire_spinlock(&log.lock);
         if (log.committing) {
-            _lock_sem(&sem);
+            _lock_sem(&begin_sem);
             _release_spinlock(&log.lock);
-            ASSERT(_wait_sem(&sem, false));
+            ASSERT(_wait_sem(&begin_sem, false));
         }
         else if ((log.real_use + OP_MAX_NUM_BLOCKS > sblock->num_log_blocks - 1) || (log.real_use + OP_MAX_NUM_BLOCKS > LOG_MAX_SIZE)) {
-            _lock_sem(&sem);
+            _lock_sem(&begin_sem);
             _release_spinlock(&log.lock);
-            ASSERT(_wait_sem(&sem, false));
-            // unalertable_wait_sem(&sem);
+            ASSERT(_wait_sem(&begin_sem, false));
+            // unalertable_wait_sem(&begin_sem);
         }
         else {
             log.outstanding++;
@@ -223,10 +224,13 @@ static void cache_end_op(OpContext* ctx) {
         log.committing = true;
     } 
     else {
-        post_all_sem(&sem);
+        post_all_sem(&begin_sem);
+        _release_spinlock(&log.lock);
+        unalertable_wait_sem(&end_sem);
+        return;
     }
-    
     if (log.committing) {
+        _release_spinlock(&log.lock);
         // _acquire_spinlock(&log.lock_2);
         //write_log
         for (usize i = 0; i < log.header.num_blocks; i++) {
@@ -257,7 +261,9 @@ static void cache_end_op(OpContext* ctx) {
 
         log.committing = false;
         log.real_use = 0;
-        post_all_sem(&sem);
+        post_all_sem(&begin_sem);
+        post_all_sem(&end_sem);
+        return;
     }
     _release_spinlock(&log.lock);
 }
@@ -270,7 +276,8 @@ void init_bcache(const SuperBlock* _sblock, const BlockDevice* _device) {
     // TODO
     init_LRUcache();
     init_log();
-    init_sem(&sem, 0);
+    init_sem(&begin_sem, 0);
+    init_sem(&end_sem, 0);
 
     _acquire_spinlock(&log.lock);
     read_header();
