@@ -54,7 +54,7 @@ NO_RETURN void exit(int code)
         proc* child_proc = container_of(child_node, proc, ptnode);
         // printk("child_node: %p, child_proc: %p, pid: %d\n", child_node, child_proc, child_proc->pid);
         child_proc -> parent = child_proc -> container -> rootproc;
-        _insert_into_list(&(root_proc.children), &(child_proc -> ptnode));
+        _insert_into_list(&child_proc -> container -> rootproc -> children, &(child_proc -> ptnode));
 
         if (is_zombie(child_proc)) {
             post_sem(&(root_proc.childexit));
@@ -189,7 +189,6 @@ void init_proc(struct proc* p)
     init_schinfo(&p->schinfo, false);
     init_pgdir(&(p->pgdir));
     p->container = &root_container;
-    // printk("%p=====%d\n", p->container, (p->container==NULL));
     p->kstack = kalloc_page();
     p->kcontext = (KernelContext*)((u64)p->kstack + PAGE_SIZE - 16 - sizeof(KernelContext) - sizeof(UserContext));
     p->ucontext = (UserContext*)((u64)p->kstack + PAGE_SIZE - 16 -sizeof(UserContext));
@@ -197,11 +196,8 @@ void init_proc(struct proc* p)
 
 struct proc* create_proc()
 {
-    // printk("ooo\n");
     struct proc* p = kalloc(sizeof(struct proc));
-    // printk("ooo\n");
     init_proc(p);
-    // printk("ooo\n");
     return p;
 }
 

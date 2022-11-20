@@ -12,7 +12,7 @@ Semaphore end_sem;
 
 // static SpinLock lock;     // protects block cache.
 // static ListNode head;     // the list of all allocated in-memory block.
-// static LogHeader header;  // in-memory copy of log header block.
+static LogHeader header;  // in-memory copy of log header block.
 
 static struct LRUcache {
     SpinLock lock;
@@ -27,7 +27,6 @@ static struct LOG {
   SpinLock lock;
   u32 outstanding; 
   bool committing;  
-  LogHeader header;
   u32 real_use;
 } log;
 
@@ -43,12 +42,12 @@ static INLINE void device_write(Block* block) {
 
 // read log header from disk.
 static INLINE void read_header() {
-    device->read(sblock->log_start, (u8*)&(log.header));
+    device->read(sblock->log_start, (u8*)&(header));
 }
 
 // write log header back to disk.
 static INLINE void write_header() {
-    device->write(sblock->log_start, (u8*)&(log.header));
+    device->write(sblock->log_start, (u8*)&(header));
 }
 
 static void init_LRUcache() {
@@ -62,7 +61,6 @@ static void init_log() {
     init_spinlock(&log.lock);
     log.outstanding = 0;
     log.committing = false;
-    log.header.num_blocks = 0;
     log.real_use = 0;
 }
 
@@ -194,17 +192,17 @@ static void cache_sync(OpContext* ctx, Block* block) {
         _acquire_spinlock(&LRUcache.lock);
         block->pinned = true;
         usize i;
-        for (i = 0; i < log.header.num_blocks; i++) {
-            if (log.header.block_no[i] == block->block_no)   
+        for (i = 0; i < header.num_blocks; i++) {
+            if (header.block_no[i] == block->block_no)   
                 break;
         }
-        log.header.block_no[i] = block->block_no;
-        if (i == log.header.num_blocks) {
+        header.block_no[i] = block->block_no;
+        if (i == header.num_blocks) {
             if (ctx->rm == 0) {
                 PANIC();
             }
             else {
-                log.header.num_blocks++;
+                header.num_blocks++;
                 ctx->rm--;
             }
         }
@@ -222,19 +220,11 @@ static void cache_end_op(OpContext* ctx) {
         
     if(log.outstanding == 0) {
         log.committing = true;
-    } 
-    else {
-        post_all_sem(&begin_sem);
-        _release_spinlock(&log.lock);
-        unalertable_wait_sem(&end_sem);
-        return;
-    }
-    if (log.committing) {
         _release_spinlock(&log.lock);
         // _acquire_spinlock(&log.lock_2);
         //write_log
-        for (usize i = 0; i < log.header.num_blocks; i++) {
-            Block* from_b = cache_acquire(log.header.block_no[i]);
+        for (usize i = 0; i < header.num_blocks; i++) {
+            Block* from_b = cache_acquire(header.block_no[i]);
             Block* to_b = cache_acquire(sblock->log_start + 1 + i);
             memmove(to_b->data, from_b->data, BLOCK_SIZE);
             device_write(to_b);
@@ -245,9 +235,9 @@ static void cache_end_op(OpContext* ctx) {
         write_header();
 
         //log -> sd
-        for (usize i = 0; i < log.header.num_blocks; i++) {
+        for (usize i = 0; i < header.num_blocks; i++) {
             Block* from_b = cache_acquire(sblock->log_start + 1 + i);
-            Block* to_b = cache_acquire(log.header.block_no[i]);
+            Block* to_b = cache_acquire(header.block_no[i]);
             memmove(to_b->data, from_b->data, BLOCK_SIZE);
             device_write(to_b);
             to_b->pinned = false;
@@ -255,17 +245,23 @@ static void cache_end_op(OpContext* ctx) {
             cache_release(to_b);
         }
         
-        log.header.num_blocks = 0;
+        header.num_blocks = 0;
         write_header();
         // _release_spinlock(&log.lock_2);
 
+        _acquire_spinlock(&log.lock);
         log.committing = false;
         log.real_use = 0;
+        _release_spinlock(&log.lock);
+
         post_all_sem(&begin_sem);
         post_all_sem(&end_sem);
-        return;
     }
-    _release_spinlock(&log.lock);
+    else {
+        post_all_sem(&begin_sem);
+        _release_spinlock(&log.lock);
+        unalertable_wait_sem(&end_sem);
+    }    
 }
 
 // initialize block cache.
@@ -281,10 +277,10 @@ void init_bcache(const SuperBlock* _sblock, const BlockDevice* _device) {
 
     _acquire_spinlock(&log.lock);
     read_header();
-    if (log.header.num_blocks > 0) {
-        for (usize i = 0; i < log.header.num_blocks; i++) {
+    if (header.num_blocks > 0) {
+        for (usize i = 0; i < header.num_blocks; i++) {
             Block* from_b = cache_acquire(sblock->log_start + 1 + i);
-            Block* to_b = cache_acquire(log.header.block_no[i]);
+            Block* to_b = cache_acquire(header.block_no[i]);
             memmove(to_b->data, from_b->data, BLOCK_SIZE);
             device_write(to_b);
             cache_release(from_b);
@@ -292,7 +288,7 @@ void init_bcache(const SuperBlock* _sblock, const BlockDevice* _device) {
         }
     }
 
-    log.header.num_blocks = 0;
+    header.num_blocks = 0;
     write_header();
     _release_spinlock(&log.lock);
 }
