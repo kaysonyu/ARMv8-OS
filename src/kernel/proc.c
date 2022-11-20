@@ -52,12 +52,13 @@ NO_RETURN void exit(int code)
         _detach_from_list(child_node);
         
         proc* child_proc = container_of(child_node, proc, ptnode);
+        proc* rootproc = child_proc -> container -> rootproc;
         // printk("child_node: %p, child_proc: %p, pid: %d\n", child_node, child_proc, child_proc->pid);
-        child_proc -> parent = child_proc -> container -> rootproc;
-        _insert_into_list(&child_proc -> container -> rootproc -> children, &(child_proc -> ptnode));
+        child_proc -> parent = rootproc;
+        _insert_into_list(&rootproc->children, &child_proc->ptnode);
 
         if (is_zombie(child_proc)) {
-            post_sem(&(root_proc.childexit));
+            post_sem(&rootproc->childexit);
         }
     }
     // _release_spinlock(&plock);
