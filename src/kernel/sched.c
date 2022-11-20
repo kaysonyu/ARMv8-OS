@@ -13,14 +13,12 @@ extern struct container root_container;
 
 extern void swtch(KernelContext* new_ctx, KernelContext** old_ctx);
 
-static SpinLock rqlock;
-// static ListNode rq;
+static SpinLock schlock;
 
 extern struct timer sched_timer[4];
 
-define_early_init(rq) {
-    init_spinlock(&rqlock);
-    // init_list_node(&rq);
+define_early_init(schlock) {
+    init_spinlock(&schlock);
 }
 
 define_init(sched) {
@@ -48,7 +46,7 @@ struct proc* thisproc()
 void init_schinfo(struct schinfo* p, bool group)
 {
     // TODO: initialize your customized schinfo for every newly-created process
-    init_list_node(&p -> rq);
+    init_list_node(&p -> rq_node);
     p -> start_ = 0;
     p -> occupy_ = 0;
     p -> iscontainer = group;
@@ -57,14 +55,14 @@ void init_schinfo(struct schinfo* p, bool group)
 void _acquire_sched_lock()
 {
     // TODO: acquire the sched_lock if need
-    _acquire_spinlock(&rqlock);
+    _acquire_spinlock(&schlock);
 
 }
 
 void _release_sched_lock()
 {
     // TODO: release the sched_lock if need
-    _release_spinlock(&rqlock);
+    _release_spinlock(&schlock);
 
 }
 
@@ -99,7 +97,7 @@ bool _activate_proc(struct proc* p, bool onalert)
     }
     else if (p->state == SLEEPING || p->state == UNUSED || (p->state == DEEPSLEEPING && !onalert)) {
         p->state = RUNNABLE;
-        _insert_into_list(&p->container->schqueue.rq, &p->schinfo.rq);
+        _insert_into_list(&p->container->schqueue.rq, &p->schinfo.rq_node);
     }
     else {
         _release_sched_lock();
@@ -114,7 +112,7 @@ void activate_group(struct container* group)
 {
     // TODO: add the schinfo node of the group to the schqueue of its parent
     _acquire_sched_lock();
-    _insert_into_list(&group->parent->schqueue.rq, &group->schinfo.rq);
+    _insert_into_list(&group->parent->schqueue.rq, &group->schinfo.rq_node);
     _release_sched_lock();
 }
 
@@ -124,7 +122,7 @@ static void update_this_state(enum procstate new_state)
     // update the state of current process to new_state, and remove it from the sched queue if new_state=SLEEPING/ZOMBIE
     auto this = thisproc();
     if (new_state == RUNNABLE && this != cpus[cpuid()].sched.idle) {
-        _insert_into_list(&this->container->schqueue.rq, &(this -> schinfo.rq)); 
+        _insert_into_list(&this->container->schqueue.rq, &(this -> schinfo.rq_node)); 
     }
     this -> state = new_state;
 
@@ -146,11 +144,11 @@ bool not_empty_container(struct container* container) {
     _for_in_list(child_node, &container->schqueue.rq) {
         if (child_node == &container->schqueue.rq) continue;
 
-        struct schinfo* schinfo_ = container_of(child_node, struct schinfo, rq);
-        // auto schunit = (schinfo->iscontainer) ? container_of(child_node, struct container, schinfo.rq) : container_of(child_node, struct proc, schinfo.rq);
+        struct schinfo* schinfo_ = container_of(child_node, struct schinfo, rq_node);
+        // auto schunit = (schinfo->iscontainer) ? container_of(child_node, struct container, schinfo.rq_node) : container_of(child_node, struct proc, schinfo.rq_node);
 
         if (schinfo_->iscontainer) {
-            not_empty_flag = not_empty_container(container_of(&schinfo_->rq, struct container, schinfo.rq));
+            not_empty_flag = not_empty_container(container_of(&schinfo_->rq_node, struct container, schinfo.rq_node));
         }
         else {
             not_empty_flag = true;
@@ -172,10 +170,10 @@ proc* traverse_queue(struct container* container) {
         if (p == &container->schqueue.rq) {
             continue;
         }
-        struct schinfo* schinfo_ = container_of(p, struct schinfo, rq);
-        // auto schunit = (schinfo->iscontainer) ? container_of(p, struct container, schinfo.rq) : container_of(p, struct proc, schinfo.rq);
+        struct schinfo* schinfo_ = container_of(p, struct schinfo, rq_node);
+        // auto schunit = (schinfo->iscontainer) ? container_of(p, struct container, schinfo.rq_node) : container_of(p, struct proc, schinfo.rq_node);
         // printk("pid_all: %d\n", proc->pid);
-        if (schinfo_->iscontainer && !not_empty_container(container_of(&schinfo_->rq, struct container, schinfo.rq)))   {
+        if (schinfo_->iscontainer && !not_empty_container(container_of(&schinfo_->rq_node, struct container, schinfo.rq_node)))   {
             continue;
         }
 
@@ -211,7 +209,7 @@ static struct proc* pick_next()
         next_proc = cpus[cpuid()].sched.idle;
     }
     else {
-        _detach_from_list(&(next_proc -> schinfo.rq));
+        _detach_from_list(&(next_proc -> schinfo.rq_node));
     }
     // _release_sched_lock();
     return next_proc;
