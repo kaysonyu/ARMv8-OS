@@ -109,5 +109,14 @@ extern BlockCache bcache;
 void init_bcache(const SuperBlock* sblock, const BlockDevice* device);
 usize BBLOCK(usize block_no, const SuperBlock* sb);
 void bzero(OpContext* ctx, u32 block_no);
+
+#define SWAP_BLOCK_NUM 200
+#define SWAP_PAGE_NUM (SWAP_BLOCK_NUM/8)
+#define SWAP_START 800
+#define SWAP_END 1000
+#define SWAP_BIT_START 100
+#define SWAP_BIT_END 125
+bool swap_used[SWAP_PAGE_NUM];
+SpinLock swap_lk;
 void release_8_blocks(u32 bno);
 u32 find_and_set_8_blocks();

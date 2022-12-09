@@ -2,24 +2,48 @@
 #include <kernel/init.h>
 #include <kernel/mem.h>
 #include <common/list.h>
+#include <common/string.h>
 #include <driver/memlayout.h>
 #include <kernel/printk.h>
+#include <fs/defines.h>
+#include <fs/block_device.h>
+#include <fs/cache.h>
+
 
 SpinLock mem_lock;
+
+u64 left_page_num;
+SpinLock left_page_lk;
 RefCount alloc_page_cnt;
 
 define_early_init(alloc_page_cnt) {
     init_rc(&alloc_page_cnt);
 }
 
+
 static QueueNode* pages;
 extern char end[];
+
+struct page pages_info[PAGE_NUM];
 
 kmem_cache_t caches[SLAB_MAX + 1]; //4~11
 
 define_early_init(pages) {   
-    for (u64 p = PAGE_BASE((u64)&end) + PAGE_SIZE; p < P2K(PHYSTOP); p += PAGE_SIZE) {
+    init_spinlock(&left_page_lk);
+    left_page_num = 0;
+
+    // memset(pages_info, 0, PAGE_NUM*sizeof(struct page));
+    // for (int i = 0; i < PAGE_NUM; i++) {
+    //     init_rc(&pages_info[i].ref);
+    // }
+    u64 zero_page = PAGE_BASE((u64)&end) + PAGE_SIZE;
+    memset((u8*)zero_page, 0, PAGE_SIZE);
+    init_rc(&pages_info[K2P(zero_page)/PAGE_SIZE].ref);
+    _increment_rc(&pages_info[K2P(zero_page)/PAGE_SIZE].ref);
+
+    for (u64 p = PAGE_BASE((u64)&end) + 2 * PAGE_SIZE; p < P2K(PHYSTOP); p += PAGE_SIZE) {
         add_to_queue(&pages, (QueueNode*)p);  
+        left_page_num++;
     } 
     for (u32 i = 0; i <= SLAB_MAX; i++) {
         caches[i].order = i;
@@ -29,13 +53,27 @@ define_early_init(pages) {
 }
 
 void* kalloc_page() {
-    _increment_rc(&alloc_page_cnt);
-    return fetch_from_queue(&pages);
+    // _increment_rc(&alloc_page_cnt);
+    QueueNode* page = fetch_from_queue(&pages);
+    init_rc(&pages_info[K2P(page)/PAGE_SIZE].ref);
+    _increment_rc(&pages_info[K2P(page)/PAGE_SIZE].ref);
+
+    _acquire_spinlock(&left_page_lk);
+    left_page_num--;
+    _release_spinlock(&left_page_lk);
+
+    return page;
 }
 
 void kfree_page(void* p) {
-    _decrement_rc(&alloc_page_cnt);
-    add_to_queue(&pages, (QueueNode*)p);
+    // _decrement_rc(&alloc_page_cnt);
+    if(_decrement_rc(&pages_info[K2P(p)/PAGE_SIZE].ref)) {
+        add_to_queue(&pages, (QueueNode*)p);
+
+        _acquire_spinlock(&left_page_lk);
+        left_page_num++;
+        _release_spinlock(&left_page_lk);
+    }
 }
 
 int log2_(isize size) {
@@ -119,4 +157,67 @@ void kfree(void* p) {
         _insert_into_list(&target_slab -> parent -> slabs_partial, &target_slab -> ptNode);
     }
     _release_spinlock(&mem_lock);
+}
+
+u64 left_page_cnt() {
+    u64 left_cnt;
+    _acquire_spinlock(&left_page_lk);
+    left_cnt = left_page_num;
+    _release_spinlock(&left_page_lk);
+
+    return left_cnt;
+    
+}
+
+void* get_zero_page() {
+    void* zero_page = (void*)(PAGE_BASE((u64)&end) + PAGE_SIZE);
+    return zero_page;
+}
+
+bool check_zero_page() {
+    u8* zero_page = (u8*) get_zero_page();
+    for (int i = 0; i < PAGE_SIZE; i++) {
+        if (*(zero_page + i) != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void page_ref_plus(void* page) {
+    _increment_rc(&pages_info[K2P(page)/PAGE_SIZE].ref);
+}
+
+u32 write_page_to_disk(void* ka) {
+    // printk("----\n");
+    u32 bno = find_and_set_8_blocks();
+    // printk("%d\n", bno);
+    // OpContext ctx;
+    // bcache.begin_op(&ctx);
+    for (usize i = 0; i < BLOCKS_PER_PAGE; i++) {
+        // printk("----\n");
+        Block* b = bcache.acquire(bno + i);
+        memcpy(b->data, (u8*)ka + i*BLOCK_SIZE, BLOCK_SIZE);
+        // printk("--b->data--:%lld\n", *(i64*)b->data);
+        bcache.sync(NULL, b);
+        bcache.release(b);
+    }
+    // bcache.end_op(&ctx);
+    return bno;
+}
+
+void read_page_from_disk(void* ka, u32 bno) {
+    // OpContext ctx;
+    // bcache.begin_op(&ctx);
+    
+    for (usize i = 0; i < BLOCKS_PER_PAGE; i++) {
+        Block* b = bcache.acquire(bno + i);
+        memcpy((u8*)ka + i*BLOCK_SIZE, b->data, BLOCK_SIZE);
+        // printk("b->data:%lld\n", *(i64*)b->data);
+        // bcache.sync(&ctx, b);
+        bcache.release(b);
+    }
+    // bcache.end_op(&ctx);
+
+    release_8_blocks(bno);
 }

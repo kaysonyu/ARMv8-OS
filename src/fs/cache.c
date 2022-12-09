@@ -4,6 +4,7 @@
 #include <kernel/mem.h>
 #include <kernel/printk.h>
 #include <kernel/proc.h>
+#include <kernel/init.h>
 
 static const SuperBlock* sblock;
 static const BlockDevice* device;
@@ -83,7 +84,6 @@ static usize get_num_cached_blocks() {
 
 // see `cache.h`.
 static Block* cache_acquire(usize block_no) {
-    // printk("~~%d\n", block_no);
     // TODO
     _acquire_spinlock(&LRUcache.lock);
 
@@ -122,7 +122,6 @@ static Block* cache_acquire(usize block_no) {
     _lock_sem(&block->lock);
     _release_spinlock(&LRUcache.lock);
     ASSERT(_wait_sem(&block->lock, false));
-
     device_read(block);
     block->valid = true;
 
@@ -300,7 +299,7 @@ static usize cache_alloc(OpContext* ctx) {
     for (u32 i = 0; i < sblock->num_blocks; i += BIT_PER_BLOCK) {
         Block* bp_b = cache_acquire(i / BIT_PER_BLOCK + sblock->bitmap_start);
 
-        for (u32 j = 0; j < BIT_PER_BLOCK && i + j < sblock->num_blocks; j++) {
+        for (u32 j = 0; j < BIT_PER_BLOCK && i + j < sblock->num_blocks-SWAP_BLOCK_NUM; j++) {
             u8 m = 1 << (j % 8);
             if (!(bp_b->data[j / 8] & m)) {
                 bp_b->data[j / 8] |= m;
@@ -330,6 +329,33 @@ static void cache_free(OpContext* ctx, usize block_no) {
     bp_b->data[(block_no % BIT_PER_BLOCK) / 8] &= ~m;
     cache_sync(ctx, bp_b);
     cache_release(bp_b);
+}
+
+// define_init(swap_used) {
+//     init_spinlock(&swap_lk);
+//     for (int i = 0; i < SWAP_PAGE_NUM; i++) {
+//         swap_used[i] = false;
+//     }
+// }
+
+void release_8_blocks(u32 bno) {
+    _acquire_spinlock(&swap_lk);
+    swap_used[(bno-SWAP_START)/BLOCKS_PER_PAGE] = false;
+    _release_spinlock(&swap_lk);
+}
+
+u32 find_and_set_8_blocks() {
+    _acquire_spinlock(&swap_lk);
+    u32 bno;
+    for (int i = 0; i < SWAP_PAGE_NUM; i++) {
+        if (!swap_used[i]) {
+            swap_used[i] = true;
+            bno = i*BLOCKS_PER_PAGE + SWAP_START;
+            _release_spinlock(&swap_lk);
+            return bno;
+        }
+    }
+    PANIC();
 }
 
 BlockCache bcache = {

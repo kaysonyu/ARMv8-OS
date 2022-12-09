@@ -21,4 +21,5 @@ typedef struct buf {
     /* TODO: Lab5 driver. */
     ListNode node;
     Semaphore sl;
+    Semaphore buf_complete;
 } buf;

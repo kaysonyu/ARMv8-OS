@@ -29,3 +29,4 @@ void* alloc_page_for_user();
 void init_sections(ListNode* section_head);
 void free_sections(struct pgdir* pd);
 u64 sbrk(i64 size);
+struct section* get_heap(struct pgdir* pd);

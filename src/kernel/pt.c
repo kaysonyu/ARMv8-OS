@@ -1,7 +1,9 @@
 #include <kernel/pt.h>
 #include <kernel/mem.h>
+#include <kernel/sched.h>
 #include <common/string.h>
 #include <aarch64/intrinsic.h>
+#include <kernel/paging.h>
 
 PTEntriesPtr get_pte(struct pgdir* pgdir, u64 va, bool alloc)
 {
@@ -49,7 +51,12 @@ PTEntriesPtr get_pte(struct pgdir* pgdir, u64 va, bool alloc)
 
 void init_pgdir(struct pgdir* pgdir)
 {
-    pgdir->pt = NULL;
+    pgdir->pt = kalloc_page();
+    memset(pgdir->pt, 0, PAGE_SIZE); 
+    init_spinlock(&pgdir->lock);
+    init_list_node(&pgdir->section_head);
+    init_sections(&pgdir->section_head);
+    pgdir->online = false;
 }
 
 void traverse_free(PTEntriesPtr table, u32 traverse_n) {
@@ -69,17 +76,32 @@ void free_pgdir(struct pgdir* pgdir)
     // TODO
     // Free pages used by the page table. If pgdir->pt=NULL, do nothing.
     // DONT FREE PAGES DESCRIBED BY THE PAGE TABLE
+    free_sections(pgdir);
     PTEntriesPtr pt0 = pgdir -> pt;
-    if (pt0) {
+    if (pt0 != NULL) {
         traverse_free(pt0, 4);
     }
+
 }
 
 void attach_pgdir(struct pgdir* pgdir)
 {
     extern PTEntries invalid_pt;
-    if (pgdir->pt)
+    _acquire_spinlock(&thisproc()->pgdir.lock);
+    thisproc()->pgdir.online = false;
+    _release_spinlock(&thisproc()->pgdir.lock);
+    
+    if (pgdir->pt) 
         arch_set_ttbr0(K2P(pgdir->pt));
+    
     else
         arch_set_ttbr0(K2P(&invalid_pt));
+    
+    _acquire_spinlock(&pgdir->lock);
+    pgdir->online = true;
+    _release_spinlock(&pgdir->lock);
+}
+
+void vmmap(struct pgdir* pd, u64 va, void* ka, u64 flags) {
+    *get_pte(pd, va, true) = K2P(ka) | flags;
 }

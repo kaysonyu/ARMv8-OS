@@ -202,6 +202,35 @@ struct proc* create_proc()
     return p;
 }
 
+struct proc* traverse_find_offline(struct container* container) { 
+    struct proc* find_proc = NULL;
+    _for_in_list(p, &container->schqueue.rq) {
+        if (p == &container->schqueue.rq) {
+            continue;
+        }
+        struct schinfo* schinfo_ = container_of(p, struct schinfo, rq_node);
+        if (!schinfo_->iscontainer) {
+            struct proc* proc = container_of(schinfo_, struct proc, schinfo);
+            if (!proc->pgdir.online) {
+                find_proc = proc;
+                break;
+            }
+        }
+        else {
+            find_proc = traverse_find_offline(container_of(schinfo_, struct container, schinfo));
+        }
+    }
+    return find_proc;
+}
+
+struct proc* get_offline_proc() {
+    struct proc* proc = traverse_find_offline(&root_container);
+    if (proc == NULL)   PANIC();
+    _acquire_spinlock(&proc->pgdir.lock);
+    return proc;
+}
+
+
 define_init(root_proc)
 {
     init_proc(&root_proc);
