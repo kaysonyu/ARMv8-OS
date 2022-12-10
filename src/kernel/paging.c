@@ -109,7 +109,7 @@ struct section* get_heap(struct pgdir* pd) {
 	_for_in_list(section_node, &pd->section_head) {
 		if (section_node == &pd->section_head)	continue;
 		struct section* section = container_of(section_node, struct section, stnode); 
-		if (section->flags == ST_HEAP) {
+		if (section->flags & ST_HEAP) {
 			heap_section = section;
 			break;
 		}
@@ -124,7 +124,7 @@ void* alloc_page_for_user(){
 		//TODO
 		struct proc* swap_proc = get_offline_proc();
 		struct section* heap_section = get_heap(&swap_proc->pgdir);
-		if (swap_proc->pgdir.online) {
+		if (swap_proc->pgdir.online || (heap_section->flags & ST_SWAP)) {
 			_release_spinlock(&swap_proc->pgdir.lock);
 			break;
 		}
@@ -188,7 +188,7 @@ void swapin(struct pgdir* pd, struct section* st){
 		vmmap(pd, va, ka, PTE_USER_DATA);
 	}
 
-	st->flags &= ~ST_SWAP;
+	st->flags &= ~(u64)ST_SWAP;
 
 	_post_sem(&st->sleeplock);
 }
@@ -201,18 +201,7 @@ int pgfault(u64 iss){
 	// printk("addr: %llx\n", addr);
 	//TODO
 
-	struct section* find_section = NULL;
-	_for_in_list(section_node, &p->pgdir.section_head) {
-		if (section_node == &p->pgdir.section_head)	continue;
-
-		struct section* section = container_of(section_node, struct section, stnode); 
-
-		if (section->begin <= addr && section->end > addr) {
-			find_section = section;
-			break;
-		}
-	}
-	ASSERT(find_section);
+	struct section* find_section = get_heap(pd);
 	PTEntriesPtr pte = get_pte(pd, addr, true);
 
 	if (*pte == 0) {
