@@ -4,6 +4,7 @@
 #include <kernel/sched.h>
 #include <test/test.h>
 #include <driver/sd.h>
+#include <fs/cache.h>
 
 bool panic_flag;
 
@@ -24,9 +25,17 @@ NO_RETURN void idle_entry() {
 NO_RETURN void kernel_entry() {
     printk("hello world %d\n", (int)sizeof(struct proc));
 
-    proc_test();
-    user_proc_test();
-    container_test();
+    
+
+    sd_init();
+    init_block_device();
+    init_bcache(get_super_block(), &block_device);
+    pgfault_first_test();
+    pgfault_second_test();
+
+    // proc_test();
+    // user_proc_test();
+    // container_test();
     // sd_test();
     
     do_rest_init();
