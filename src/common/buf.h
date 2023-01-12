@@ -19,4 +19,7 @@ typedef struct buf {
      * Add other necessary elements. It depends on you.
      */
     /* TODO: Lab5 driver. */
+    ListNode node;
+    Semaphore sl;
+    Semaphore buf_complete;
 } buf;

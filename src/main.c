@@ -1,6 +1,7 @@
 #include <aarch64/intrinsic.h>
 #include <common/string.h>
 #include <kernel/init.h>
+#include <kernel/printk.h>
 
 static bool boot_secondary_cpus = false;
 
@@ -27,7 +28,7 @@ void main()
         while (!boot_secondary_cpus);
         arch_dsb_sy();
     }
-
     // enter idle process
     set_return_addr(idle_entry);
 }
+

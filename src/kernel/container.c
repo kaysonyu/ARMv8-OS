@@ -5,6 +5,7 @@
 #include <kernel/printk.h>
 #include <kernel/mem.h>
 #include <kernel/sched.h>
+#include <kernel/pid.h>
 
 struct container root_container;
 extern struct proc root_proc;
@@ -25,12 +26,28 @@ void init_container(struct container* container)
     init_schqueue(&container->schqueue);
     // TODO: initialize namespace (local pid allocator)
 
+    init_spinlock(&container->localpidmap.pidlock);
+    _acquire_spinlock(&container->localpidmap.pidlock);
+    container->localpidmap.free_num = PID_MAX;
+    memset(container->localpidmap.map, 0, MAP_SIZE);
+    _release_spinlock(&container->localpidmap.pidlock);
 }
 
 struct container* create_container(void (*root_entry)(), u64 arg)
 {
     // TODO
+    struct container* container = kalloc(sizeof(struct container));
+    init_container(container);
+    container->parent = thisproc()->container;
+    struct proc* rootproc = create_proc();
+    set_parent_to_this(rootproc);
+    container->rootproc = rootproc;
+    rootproc->container = container;
     
+    start_proc(rootproc, root_entry, arg);
+    activate_group(container);
+
+    return container;
 }
 
 define_early_init(root_container)

@@ -9,6 +9,9 @@
 
 #define ROOT_INODE_NO 1
 
+#define BSIZE         BLOCK_SIZE
+#define IPB           (BSIZE / sizeof(InodeEntry))
+
 struct InodeTree;
 
 typedef struct {

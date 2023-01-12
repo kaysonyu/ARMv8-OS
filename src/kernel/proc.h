@@ -16,16 +16,20 @@ enum procstate { UNUSED, RUNNABLE, RUNNING, SLEEPING, DEEPSLEEPING, ZOMBIE };
 typedef struct UserContext
 {
     // TODO: customize your trap frame
+    u64 spsr, elr, lr, sp_el0;
+    u64 x[18];
 
 } UserContext;
 
 typedef struct KernelContext
 {
     // TODO: customize your context
+    u64 lr, x0, x1;
+    u64 x[11];  //x19-x29
 
 } KernelContext;
 
-struct proc
+typedef struct proc
 {
     bool killed;
     bool idle;
@@ -45,7 +49,7 @@ struct proc
     KernelContext* kcontext;
     struct oftable oftable;
     Inode* cwd; // current working dictionary
-};
+} proc;
 
 // void init_proc(struct proc*);
 WARN_RESULT struct proc* create_proc();
@@ -55,3 +59,4 @@ NO_RETURN void exit(int code);
 WARN_RESULT int wait(int* exitcode, int* pid);
 WARN_RESULT int kill(int pid);
 WARN_RESULT int fork();
+struct proc* get_offline_proc();

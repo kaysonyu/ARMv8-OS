@@ -2,9 +2,12 @@
 
 #include <common/defines.h>
 #include <aarch64/mmu.h>
+#include <common/list.h>
 #include <common/rc.h>
 
 #define REVERSED_PAGES 1024 //Reversed pages
+#define SLAB_MAX 11
+#define PAGE_NUM PHYSTOP/PAGE_SIZE
 
 struct page{
 	RefCount ref;
@@ -21,3 +24,17 @@ WARN_RESULT void* get_zero_page();
 bool check_zero_page();
 u32 write_page_to_disk(void* ka);
 void read_page_from_disk(void* ka, u32 bno);
+void page_ref_plus(void* page);
+
+typedef struct kmem_cache {
+    u32 order;
+    ListNode slabs_partial;    
+    ListNode slabs_full;
+} kmem_cache_t;
+
+typedef struct slab {
+    kmem_cache_t* parent;
+    u32 used;
+    ListNode objs;
+    ListNode ptNode;
+} slab_t;

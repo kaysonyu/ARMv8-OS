@@ -4,6 +4,7 @@
 #include <kernel/sched.h>
 #include <test/test.h>
 #include <driver/sd.h>
+#include <fs/cache.h>
 
 bool panic_flag;
 

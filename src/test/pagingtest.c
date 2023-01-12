@@ -55,6 +55,7 @@ void pgfault_first_test(){
 	for(i64 i = 0; i < limit; ++i){
 		u64 va = i * PAGE_SIZE;
 		vmmap(pd, va, get_zero_page(), PTE_RO | PTE_USER_DATA);
+		page_ref_plus(get_zero_page());
 		ASSERT(*(i64*)va == 0);
 	}
 	ASSERT(pc == left_page_cnt());
@@ -67,6 +68,7 @@ void pgfault_first_test(){
 
 	//swap
 	printk("in swap\n");
+	_acquire_spinlock(&pd->lock);
 	swapout(pd, st);
 	arch_tlbi_vmalle1is(); 
 	for(i64 i = 0; i < limit; ++i){
@@ -97,6 +99,7 @@ void pgfault_second_test(){
 	for(i64 i = 0; i < limit/2; ++i){
 		u64 va = i * PAGE_SIZE;
 		vmmap(pd, va, get_zero_page(), PTE_RO | PTE_USER_DATA);
+		page_ref_plus(get_zero_page());
 	}
 	arch_tlbi_vmalle1is();
 	for(i64 i = 0; i < limit; ++i){
@@ -112,7 +115,9 @@ void pgfault_second_test(){
 	for(i64 i = 0; i < limit; ++i){
 		u64 va = i * PAGE_SIZE;
 		vmmap(pd, va, get_zero_page(), PTE_RO | PTE_USER_DATA);
+		page_ref_plus(get_zero_page());
 	}
+	_acquire_spinlock(&pd->lock);
 	swapout(pd, st);
 	arch_tlbi_vmalle1is();
 	for(i64 i = 0; i < limit; ++i){
@@ -126,15 +131,19 @@ void pgfault_second_test(){
 	printk("SWAP + lazy allocation\n");
 	for(i64 i = 2; i < limit; ++i){
 		u64 va = sbrk(i); 
+		_acquire_spinlock(&pd->lock);
 		swapout(pd, st); //should not swapout
 		arch_tlbi_vmalle1is();
 		*(i64*)va = i;
+		_acquire_spinlock(&pd->lock);
 		swapout(pd, st);  //only need to swapout one page
 		arch_tlbi_vmalle1is();
 		ASSERT(*(i64*)va == i);//swapin one page too
+		_acquire_spinlock(&pd->lock);
 		swapout(pd, st);
 		arch_tlbi_vmalle1is();
 		*(i64*)(va + PAGE_SIZE)= -i; //swapin one page and allocate a new one
+		_acquire_spinlock(&pd->lock);
 		swapout(pd, st);
 		arch_tlbi_vmalle1is();
 		ASSERT(*(i64*)va + *(i64*)(va+PAGE_SIZE) == 0);
@@ -146,9 +155,12 @@ void pgfault_second_test(){
 	for(i64 i = 2; i < limit; ++i){
 		sbrk(i);
 		vmmap(pd, 0, get_zero_page(), PTE_RO | PTE_USER_DATA);
+		page_ref_plus(get_zero_page());
+		_acquire_spinlock(&pd->lock);
 		swapout(pd, st);
 		arch_tlbi_vmalle1is();
 		*(i64*)0 = i; *(i64*)PAGE_SIZE = -i;
+		_acquire_spinlock(&pd->lock);
 		swapout(pd, st);
 		arch_tlbi_vmalle1is();
 		ASSERT(*(i64*)0 + *(i64*)PAGE_SIZE == 0);

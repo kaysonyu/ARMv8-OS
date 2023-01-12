@@ -7,6 +7,7 @@
  */
 
 #define BLOCK_SIZE 512
+#define BLOCKS_PER_PAGE (PAGE_SIZE/BLOCK_SIZE)
 
 // maximum number of distinct block numbers can be recorded in the log header.
 #define LOG_MAX_SIZE ((BLOCK_SIZE - sizeof(usize)) / sizeof(usize))
