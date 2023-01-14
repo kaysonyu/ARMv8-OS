@@ -24,6 +24,9 @@
 #include <common/string.h>
 #include <fs/inode.h>
 
+static struct InodeTree inode_tree;
+static struct BlockCache cache;
+
 struct iovec {
     void* iov_base; /* Starting address. */
     usize iov_len; /* Number of bytes to transfer. */
@@ -41,7 +44,14 @@ static struct file* fd2file(int fd) {
  * Takes over file reference from caller on success.
  */
 int fdalloc(struct file* f) {
-    /* TODO: Lab10 Shell */
+    int fd;
+    struct proc* proc = thisproc();
+    for (fd = 0; fd < NOFILE; fd++) {
+        if (proc->oftable.ofile[fd] == 0) {
+            proc->oftable.ofile[fd] = f;
+            return fd;
+        }
+    }
     return -1;
 }
 
@@ -115,7 +125,9 @@ define_syscall(writev, int fd, struct iovec *iov, int iovcnt) {
  * Clear this fd of this process.
  */
 define_syscall(close, int fd) {
-    /* TODO: Lab10 Shell */
+    struct file* f = thisproc()->oftable.ofile[fd];
+    thisproc()->oftable.ofile[fd] = 0;
+    fileclose(f);
     return 0;
 }
 
@@ -223,8 +235,51 @@ bad:
  * If type is directory, you should additionally handle "." and "..".
  */
 Inode* create(const char* path, short type, short major, short minor, OpContext* ctx) {
-    /* TODO: Lab10 Shell */
-    return 0;
+    Inode *ip, *dp;
+    usize ino;
+    char name[FILE_NAME_MAX_LENGTH];
+
+    cache.begin_op(ctx);
+    dp = nameiparent(path, name, ctx);
+    inode_tree.lock(dp);
+
+    ino = inode_tree.lookup(dp, name, NULL);
+    if (ino != 0) {
+        ip = inode_tree.get(ino);
+        inode_tree.unlock(dp);
+        inode_tree.put(ctx, dp);
+
+        inode_tree.lock(ip);
+        if (type == INODE_REGULAR && (ip->entry.type == INODE_REGULAR || ip->entry.type == INODE_DEVICE)) {
+            cache.end_op(ctx);
+            return ip;
+        }
+        inode_tree.unlock(ip);
+        inode_tree.put(ctx, ip);
+        cache.end_op(ctx);
+        return 0;
+    }
+
+    ip = inode_tree.alloc(ctx, type);
+    inode_tree.lock(ip);
+    ip->entry.major = major;
+    ip->entry.minor = minor;
+    ip->entry.num_links = 1;
+    inode_tree.sync(ctx, ip, true);
+
+    if (type == INODE_DIRECTORY) {
+        dp->entry.num_links++;
+        inode_tree.sync(ctx, ip, true);
+
+        inode_tree.insert(ctx, ip, ".", ip->inode_no);
+        inode_tree.insert(ctx, ip, "..", dp->inode_no);
+    }
+
+    inode_tree.insert(ctx, dp, name, ip->inode_no);
+    inode_tree.unlock(dp);
+    cache.end_op(ctx);
+
+    return ip;
 }
 
 define_syscall(openat, int dirfd, const char* path, int omode) {
@@ -322,11 +377,47 @@ define_syscall(mknodat, int dirfd, const char* path, int major, int minor) {
 }
 
 define_syscall(chdir, const char* path) {
-    // TODO
     // change the cwd (current working dictionary) of current process to 'path'
     // you may need to do some validations
+    Inode* ip;
+    OpContext ctx_, *ctx;
+    ctx = &ctx_;
+    struct proc* proc = thisproc();
+
+    cache.begin_op(ctx);
+    ip = namei(path, ctx);
+
+    if (ip == 0) {
+        cache.end_op(ctx);
+        return -1;
+    }
+
+    inode_tree.lock(ip);
+    if (ip->entry.type != INODE_DIRECTORY) {
+        inode_tree.unlock(ip);
+        cache.end_op(ctx);
+        return -1;
+    }
+
+    inode_tree.unlock(ip);
+    inode_tree.put(ctx, proc->cwd);
+    cache.end_op(ctx);
+
+    proc->cwd = ip;
+    return 0;
 }
 
-define_syscall(pipe2, char int *fd, int flags) {
-    // TODO
+define_syscall(pipe2, char *fd, int flags) {
+    struct file *f0, *f1;
+    int fd0, fd1;
+    if (pipeAlloc(&f0, &f1) < 0) {
+        return -1;
+    }
+    fd0 = fdalloc(f0);
+    fd1 = fdalloc(f1);
+
+    memcpy(fd, &fd0, sizeof(fd0));
+    memcpy(fd+sizeof(fd0), &fd1, sizeof(fd1));
+
+    return 0;
 }
