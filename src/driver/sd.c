@@ -1,7 +1,6 @@
 
 #include <driver/sddef.h>
 #include <kernel/mem.h>
-#include <kernel/sched.h>
 
 /*
  * Initialize SD card.

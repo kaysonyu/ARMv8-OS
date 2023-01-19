@@ -69,13 +69,13 @@ define_syscall(ioctl, int fd, u64 request) {
 /*
  *	map addr to a file
  */
-define_syscall(mmap, void* addr, int length, int prot, int flags, int fd, int offset) {
-    // TODO
-}
+// define_syscall(mmap, void* addr, int length, int prot, int flags, int fd, int offset) {
+//     // TODO
+// }
 
-define_syscall(munmap, void *addr, usize length) {
-    // TODO
-}
+// define_syscall(munmap, void *addr, usize length) {
+//     // TODO
+// }
 
 /*
  * Get the parameters and call filedup.
@@ -188,20 +188,6 @@ static int isdirempty(Inode* dp) {
     return 1;
 }
 
-// Is the directory dp empty except for "." and ".." ?
-static int isdirempty(Inode* dp) {
-    usize off;
-    DirEntry de;
-
-    for (off = 2 * sizeof(de); off < dp->entry.num_bytes; off += sizeof(de)) {
-        if (inodes.read(dp, (u8*)&de, off, sizeof(de)) != sizeof(de))
-            PANIC();
-        if (de.inode_no != 0)
-            return 0;
-    }
-    return 1;
-}
-
 define_syscall(unlinkat, int fd, const char* path, int flag) {
     ASSERT(fd == AT_FDCWD && flag == 0);
     Inode *ip, *dp;
@@ -296,7 +282,7 @@ Inode* create(const char* path, short type, short major, short minor, OpContext*
         return 0;
     }
 
-    ip = inodes.alloc(ctx, type);
+    ip = inodes.get(inodes.alloc(ctx, type));
     inodes.lock(ip);
     ip->entry.major = major;
     ip->entry.minor = minor;
@@ -454,6 +440,8 @@ define_syscall(pipe2, int *fd, int flags) {
 
     fd[0] = fd0;
     fd[1] = fd1;
+
+    ASSERT(flags || true);
 
     return 0;
 }

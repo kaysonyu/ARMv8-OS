@@ -7,6 +7,7 @@
 #include <kernel/syscall.h>
 #include <kernel/pt.h>
 #include <kernel/mem.h>
+#include <kernel/printk.h>
 #include <kernel/paging.h>
 #include <aarch64/trap.h>
 #include <fs/file.h>
@@ -29,12 +30,12 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
 	ctx = &ctx_;
 	Inode *ip;
 	Elf64_Ehdr elf;
-	char magic[5];
-	PTEntriesPtr pt;
 	int i, off;
 	Elf64_Phdr ph;
 	u64 sp, stackbase, sz = 0;
-	u64 argc = 0, ustack[MAXARG + 1];
+	u64 argc = 0;
+
+	ASSERT((u64)envp || true);
 
 	//重置页表
 	free_pgdir(&p->pgdir);
@@ -48,22 +49,18 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
 
 	inodes.lock(ip);
 
-	inodes.read(ip, &elf, 0, sizeof(Elf64_Ehdr));
+	inodes.read(ip, (u8*)&elf, 0, sizeof(Elf64_Ehdr));
 
-	snprintf(magic, 5, elf.e_ident);
-
-	if (magic != ELFMAG) {
+	if (strncmp((char*)elf.e_ident, ELFMAG, 4) != 0) {
 		inodes.unlock(ip);
 		inodes.put(ctx, ip);
 		bcache.end_op(ctx);
-		return;
+		return -1;
 	}
-
-	pt = p->pgdir.pt; 
 
 	//步骤2:加载程序头和程序本身
 	for (i = 0, off = elf.e_phoff; i < elf.e_phnum; i++, off += sizeof(Elf64_Phdr)) {
-		inodes.read(ip, &ph, off, sizeof(Elf64_Phdr));
+		inodes.read(ip, (u8*)&ph, off, sizeof(Elf64_Phdr));
 
 		if (ph.p_type != PT_LOAD)	continue;
 
@@ -82,7 +79,7 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
 	}
 	
 	inodes.unlock(ip);
-	inodes.put(ip, ctx);
+	inodes.put(ctx, ip);
 	bcache.end_op(ctx);
 
 
@@ -106,7 +103,7 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
 		if (sp < stackbase) {
 			goto bad;
 		}
-		if (copyout(&p->pgdir, sp, argv[i], strlen(argv[i]) + 1) < 0) {
+		if (copyout(&p->pgdir, (void*)sp, argv[i], strlen(argv[i]) + 1) < 0) {
 			goto bad;
 		}
 	}
@@ -129,7 +126,7 @@ bad:
         free_pgdir(&p->pgdir);
     if (ip) {
         inodes.unlock(ip);
-        inodes.put(ip, ctx);
+        inodes.put(ctx, ip);
         bcache.end_op(ctx);
     }
     return -1;
@@ -189,7 +186,7 @@ static int load_seg(struct pgdir *pd, u64 va, Inode *ip, usize offset, usize sz,
 
 //填充bss段
 static int fill_bss(struct pgdir *pd, u64 va, usize sz) {
-	u64 i, n;
+	u64 i;
 
 	if (va % PAGE_SIZE != 0) {
 		printk("fill_bss: va must be page aligned\n");

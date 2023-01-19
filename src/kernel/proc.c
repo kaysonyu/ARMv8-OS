@@ -246,9 +246,27 @@ define_init(root_proc)
  */
 void trap_return();
 int fork() {
-    int i, pid;
+    int pid;
     struct proc *p = thisproc();
     struct proc *fork_p = create_proc();
+
+    fork_p->killed = p->killed;
+    fork_p->idle = p->idle;
+
+    set_parent_to_this(fork_p);
+    set_container_to_this(fork_p);
+
+    memmove(fork_p->ucontext, p->ucontext, sizeof(UserContext));
+    fork_p->ucontext->x[0] = 0;
+
+    for (int i = 0; i < NOFILE; i++) {
+        if (p->oftable.ofile[i]) {
+            fork_p->oftable.ofile[i] = filedup(p->oftable.ofile[i]);
+        }
+    }
+    if (fork_p->cwd) {
+        fork_p->cwd = inodes.share(p->cwd);
+    }
 
     _for_in_list(node, &p->pgdir.section_head) {
         if (node == &p->pgdir.section_head)  continue;
@@ -261,31 +279,19 @@ int fork() {
         _insert_into_list(&fork_p->pgdir.section_head, &c_sec->stnode);
 
         for (u64 va = p_sec->begin; va < p_sec->end; va += PAGE_SIZE) {
-            PTEntriesPtr pte = get_pte(p->pgdir.pt, va, false);
+            PTEntriesPtr pte = get_pte(&p->pgdir, va, false);
             u64 flags = PTE_FLAGS(*pte);
 
             void* ka = alloc_page_for_user();
-            memmove(ka, va, PAGE_SIZE);
+            memmove(ka, (void*)va, PAGE_SIZE);
 
-            vmmap(fork_p->pgdir.pt, va, ka, flags);
+            vmmap(&fork_p->pgdir, va, ka, flags);
         }
     }
 
-    fork_p->parent = p;
+    pid = fork_p->pid;
 
-    memmove(fork_p->ucontext, p->ucontext, sizeof(UserContext));
-    fork_p->ucontext->x[0] = 0;
-
-    for (int i = 0; i < NOFILE; i++) {
-        if (p->oftable.ofile[i]) {
-            fork_p->oftable.ofile[i] = filedup(p->oftable.ofile[i]);
-        }
-    }
-    fork_p->cwd = inodes.share(p->cwd);
-
-    int pid = fork_p->pid;
-
-    start_proc(fork_p, p->kcontext->x0, p->kcontext->x1);
+    start_proc(fork_p, trap_return, 0);
 
     return pid;
 }

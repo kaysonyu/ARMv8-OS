@@ -22,12 +22,50 @@ void syscall_entry(UserContext* context)
 
 // check if the virtual address [start,start+size) is READABLE by the current user process
 bool user_readable(const void* start, usize size) {
-    // TODO
+    u64 va = (u64)start;
+    u64 va_base;
+    u64 n;
+    while (size > 0) {
+        va_base = PAGE_BASE(va);
+        PTEntriesPtr pte = get_pte(&thisproc()->pgdir, va_base, false);
+        if (pte == NULL) {
+            return false;
+        }
+        if (!(*pte & PTE_USER_DATA)) {
+            return false;
+        }
+        n = PAGE_SIZE - (va - va_base);
+        if (n > size) {
+            n = size;
+        }
+        size -= n;
+        va = va_base + PAGE_SIZE;
+    }
+    return true;
 }
 
 // check if the virtual address [start,start+size) is READABLE & WRITEABLE by the current user process
 bool user_writeable(const void* start, usize size) {
-    // TODO
+    u64 va = (u64)start;
+    u64 va_base;
+    u64 n;
+    while (size > 0) {
+        va_base = PAGE_BASE(va);
+        PTEntriesPtr pte = get_pte(&thisproc()->pgdir, va_base, false);
+        if (pte == NULL) {
+            return false;
+        }
+        if (!(*pte & PTE_USER_DATA) || !(*pte & PTE_RO)) {
+            return false;
+        }
+        n = PAGE_SIZE - (va - va_base);
+        if (n > size) {
+            n = size;
+        }
+        size -= n;
+        va = va_base + PAGE_SIZE;
+    }
+    return true;
 }
 
 // get the length of a string including tailing '\0' in the memory space of current user process

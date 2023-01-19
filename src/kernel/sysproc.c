@@ -27,10 +27,10 @@ define_syscall(myyield) {
     return 0;
 }
 
-define_syscall(yield) {
-    yield();
-    return 0;
-}
+// define_syscall(yield) {
+//     yield();
+//     return 0;
+// }
 
 define_syscall(pstat) {
     return (u64)left_page_cnt();
@@ -45,6 +45,7 @@ define_syscall(clone, int flag, void* childstk) {
         printk("sys_clone: flags other than SIGCHLD are not supported.\n");
         return -1;
     }
+    ASSERT((u64)childstk || true);
     return fork();
 }
 

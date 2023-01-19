@@ -6,7 +6,6 @@
 #include <kernel/schinfo.h>
 #include <kernel/pt.h>
 #include <kernel/container.h>
-#include <fs/inode.h>
 #include <fs/file.h>
 
 #define NOFILE 1024 /* open files per process */

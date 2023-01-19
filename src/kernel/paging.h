@@ -28,6 +28,6 @@ void swapin(struct pgdir* pd, struct section* st);
 void* alloc_page_for_user();
 void init_sections(ListNode* section_head);
 void free_sections(struct pgdir* pd);
-void copy_sections(ListNode* from_head, ListNode* to_head);
+// void copy_sections(ListNode* from_head, ListNode* to_head);
 u64 sbrk(i64 size);
 struct section* get_heap(struct pgdir* pd);

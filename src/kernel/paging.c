@@ -123,7 +123,6 @@ struct section* get_heap(struct pgdir* pd) {
 	return heap_section;
 }
 
-
 void* alloc_page_for_user(){
 	while (left_page_cnt() <= REVERSED_PAGES){ //this is a soft limit
 		//TODO
@@ -231,7 +230,6 @@ int pgfault(u64 iss){
 
 	//无意义
 	ASSERT(true|iss);
-
 
 	arch_tlbi_vmalle1is();
 	return 0;
