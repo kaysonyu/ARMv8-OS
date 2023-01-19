@@ -24,8 +24,8 @@
 #include <common/string.h>
 #include <fs/inode.h>
 
-static struct InodeTree inode_tree;
-static struct BlockCache cache;
+extern InodeTree inodes;
+extern BlockCache bcache;
 
 struct iovec {
     void* iov_base; /* Starting address. */
@@ -36,7 +36,12 @@ struct iovec {
 // get the file object by fd
 // return null if the fd is invalid
 static struct file* fd2file(int fd) {
-    // TODO
+    struct file *f = NULL;
+    struct proc* proc = thisproc();
+    if (fd >= 0 && fd < NOFILE) {
+        f = proc->oftable.ofile[fd];
+    }
+    return f;
 }
 
 /*
@@ -68,7 +73,7 @@ define_syscall(mmap, void* addr, int length, int prot, int flags, int fd, int of
     // TODO
 }
 
-define_syscall(munmap, void *addr, size_t length) {
+define_syscall(munmap, void *addr, usize length) {
     // TODO
 }
 
@@ -270,45 +275,45 @@ Inode* create(const char* path, short type, short major, short minor, OpContext*
     usize ino;
     char name[FILE_NAME_MAX_LENGTH];
 
-    cache.begin_op(ctx);
+    bcache.begin_op(ctx);
     dp = nameiparent(path, name, ctx);
-    inode_tree.lock(dp);
+    inodes.lock(dp);
 
-    ino = inode_tree.lookup(dp, name, NULL);
+    ino = inodes.lookup(dp, name, NULL);
     if (ino != 0) {
-        ip = inode_tree.get(ino);
-        inode_tree.unlock(dp);
-        inode_tree.put(ctx, dp);
+        ip = inodes.get(ino);
+        inodes.unlock(dp);
+        inodes.put(ctx, dp);
 
-        inode_tree.lock(ip);
+        inodes.lock(ip);
         if (type == INODE_REGULAR && (ip->entry.type == INODE_REGULAR || ip->entry.type == INODE_DEVICE)) {
-            cache.end_op(ctx);
+            bcache.end_op(ctx);
             return ip;
         }
-        inode_tree.unlock(ip);
-        inode_tree.put(ctx, ip);
-        cache.end_op(ctx);
+        inodes.unlock(ip);
+        inodes.put(ctx, ip);
+        bcache.end_op(ctx);
         return 0;
     }
 
-    ip = inode_tree.alloc(ctx, type);
-    inode_tree.lock(ip);
+    ip = inodes.alloc(ctx, type);
+    inodes.lock(ip);
     ip->entry.major = major;
     ip->entry.minor = minor;
     ip->entry.num_links = 1;
-    inode_tree.sync(ctx, ip, true);
+    inodes.sync(ctx, ip, true);
 
     if (type == INODE_DIRECTORY) {
         dp->entry.num_links++;
-        inode_tree.sync(ctx, ip, true);
+        inodes.sync(ctx, ip, true);
 
-        inode_tree.insert(ctx, ip, ".", ip->inode_no);
-        inode_tree.insert(ctx, ip, "..", dp->inode_no);
+        inodes.insert(ctx, ip, ".", ip->inode_no);
+        inodes.insert(ctx, ip, "..", dp->inode_no);
     }
 
-    inode_tree.insert(ctx, dp, name, ip->inode_no);
-    inode_tree.unlock(dp);
-    cache.end_op(ctx);
+    inodes.insert(ctx, dp, name, ip->inode_no);
+    inodes.unlock(dp);
+    bcache.end_op(ctx);
 
     return ip;
 }
@@ -415,30 +420,30 @@ define_syscall(chdir, const char* path) {
     ctx = &ctx_;
     struct proc* proc = thisproc();
 
-    cache.begin_op(ctx);
+    bcache.begin_op(ctx);
     ip = namei(path, ctx);
 
     if (ip == 0) {
-        cache.end_op(ctx);
+        bcache.end_op(ctx);
         return -1;
     }
 
-    inode_tree.lock(ip);
+    inodes.lock(ip);
     if (ip->entry.type != INODE_DIRECTORY) {
-        inode_tree.unlock(ip);
-        cache.end_op(ctx);
+        inodes.unlock(ip);
+        bcache.end_op(ctx);
         return -1;
     }
 
-    inode_tree.unlock(ip);
-    inode_tree.put(ctx, proc->cwd);
-    cache.end_op(ctx);
+    inodes.unlock(ip);
+    inodes.put(ctx, proc->cwd);
+    bcache.end_op(ctx);
 
     proc->cwd = ip;
     return 0;
 }
 
-define_syscall(pipe2, char *fd, int flags) {
+define_syscall(pipe2, int *fd, int flags) {
     struct file *f0, *f1;
     int fd0, fd1;
     if (pipeAlloc(&f0, &f1) < 0) {
@@ -447,8 +452,8 @@ define_syscall(pipe2, char *fd, int flags) {
     fd0 = fdalloc(f0);
     fd1 = fdalloc(f1);
 
-    memcpy(fd, &fd0, sizeof(fd0));
-    memcpy(fd+sizeof(fd0), &fd1, sizeof(fd1));
+    fd[0] = f0;
+    fd[1] = f1;
 
     return 0;
 }
