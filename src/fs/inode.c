@@ -5,6 +5,8 @@
 #include <kernel/mem.h>
 #include <kernel/printk.h>
 #include <sys/stat.h>
+#include <kernel/proc.h>
+#include <kernel/sched.h>
 
 // this lock mainly prevents concurrent access to inode list `head`, reference
 // count increment and decrement.
@@ -107,7 +109,6 @@ static Inode* inode_get(usize inode_no) {
     ASSERT(inode_no > 0);
     ASSERT(inode_no < sblock->num_inodes);
 
-
     _acquire_spinlock(&lock);
     
     _for_in_list(node, &head) {
@@ -180,22 +181,30 @@ static void inode_put(OpContext* ctx, Inode* inode) {
 
     _decrement_rc(&inode->rc);
 
-    if (inode->rc.count == 0) {
-        if ((inode->entry.num_links == 0)) {
-            inode_clear(ctx, inode);
-
-            usize i_no = inode->inode_no;
-            Block* block = cache->acquire(sblock->inode_start + i_no/IPB);
-            // printk("---IPB:%d, i_no:%d, i_noIPB:%d---\n", IPB, i_no, i_no%IPB);
-            InodeEntry* d_inode = (InodeEntry*)block->data + i_no%IPB;
-            memset(d_inode, 0, sizeof(InodeEntry));
-            cache->sync(ctx, block);  
-            cache->release(block);
-        }
-        _detach_from_list(&inode->node);
-        kfree(inode);
+    if (inode->rc.count > 0) {
+        _release_spinlock(&lock);
+        return;
     }
+    
+    if ((inode->entry.num_links == 0)) {
+        unalertable_wait_sem(&inode->lock);
+        _release_spinlock(&lock);
 
+        inode_clear(ctx, inode);
+
+        usize i_no = inode->inode_no;
+        Block* block = cache->acquire(sblock->inode_start + i_no/IPB);
+        // printk("---IPB:%d, i_no:%d, i_noIPB:%d---\n", IPB, i_no, i_no%IPB);
+        InodeEntry* d_inode = (InodeEntry*)block->data + i_no%IPB;
+        memset(d_inode, 0, sizeof(InodeEntry));
+        cache->sync(ctx, block);  
+        cache->release(block);
+
+        post_sem(&inode->lock);
+        _acquire_spinlock(&lock);
+    }
+    _detach_from_list(&inode->node);
+    kfree(inode);
     _release_spinlock(&lock);
 }
 
@@ -245,8 +254,8 @@ static usize inode_map(OpContext* ctx,
 static usize inode_read(Inode* inode, u8* dest, usize offset, usize count) {
     InodeEntry* entry = &inode->entry;
     if (inode->entry.type == INODE_DEVICE) {
-        assert(inode->entry.major == 1);
-        return console_read(inode, dest, count);
+        ASSERT(inode->entry.major == 1);
+        return console_read(inode, (char*)dest, count);
     }
     if (count + offset > entry->num_bytes)
         count = entry->num_bytes - offset;
@@ -283,8 +292,8 @@ static usize inode_write(OpContext* ctx,
     InodeEntry* entry = &inode->entry;
     usize end = offset + count;
     if (inode->entry.type == INODE_DEVICE) {
-        assert(inode->entry.major == 1);
-        return console_write(inode, src, count);
+        ASSERT(inode->entry.major == 1);
+        return console_write(inode, (char*)src, count);
     }
     ASSERT(offset <= entry->num_bytes);
     ASSERT(end <= INODE_MAX_BYTES);
@@ -451,8 +460,50 @@ static Inode* namex(const char* path,
                     int nameiparent,
                     char* name,
                     OpContext* ctx) {
-    /* TODO: Lab10 Shell */
-    return 0;
+    Inode *target_inode, *next_inode;
+    usize next_ino;
+
+    if (*path == '/') {
+        target_inode = inode_get(ROOT_INODE_NO);
+    }
+    else {
+        target_inode = inode_share(thisproc()->cwd);
+    }
+        
+    while ((path = skipelem(path, name)) != NULL) {
+        inode_lock(target_inode);
+
+        //保证当前级为目录
+        if (target_inode->entry.type != INODE_DIRECTORY) {
+            inode_unlock(target_inode);
+            inode_put(ctx, target_inode);
+            return NULL;
+        }
+
+        // /a/b/c taget_inode为b, 且返回父级目录
+        if (nameiparent && *path == '\0') {
+            inode_unlock(target_inode);
+            return target_inode;
+        }
+
+        //利用name查找下一级
+        next_ino = inode_lookup(target_inode, name, NULL);
+        if (next_ino == 0) {
+            inode_unlock(target_inode);
+            inode_put(ctx, target_inode);
+            return NULL;
+        }
+        next_inode = inode_get(next_ino);
+        inode_unlock(target_inode);
+        inode_put(ctx, target_inode);
+        target_inode = next_inode;
+    }
+
+    if (nameiparent) {
+        inode_put(ctx, target_inode);
+        return NULL;
+    }
+    return target_inode;
 }
 
 Inode* namei(const char* path, OpContext* ctx) {

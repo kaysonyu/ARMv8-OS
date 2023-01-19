@@ -8,6 +8,9 @@
 
 bool panic_flag;
 
+extern char icode[], eicode[];
+void trap_return();
+
 NO_RETURN void idle_entry() {
     set_cpu_on();
     while (1) {
@@ -24,15 +27,21 @@ NO_RETURN void idle_entry() {
 
 NO_RETURN void kernel_entry() {
     printk("hello world %d\n", (int)sizeof(struct proc));
-
-    // proc_test();
-    // user_proc_test();
-    // container_test();
-    // sd_test();
     
     do_rest_init();
 
     // TODO: map init.S to user space and trap_return to run icode
+    struct proc* p = thisproc();
+    for (u64 q = (u64)icode; q < (u64)eicode; q += PAGE_SIZE) {
+        vmmap(&p->pgdir, 0x400000 + q - (u64)icode, (void*)q, PTE_USER_DATA);
+    }
+    p->ucontext->elr = 0x400000;
+    p->ucontext->spsr = 0;
+
+    arch_tlbi_vmalle1is();
+    trap_return();
+
+    PANIC();
 }
 
 NO_INLINE NO_RETURN void _panic(const char* file, int line) {

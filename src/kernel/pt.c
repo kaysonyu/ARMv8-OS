@@ -55,7 +55,7 @@ void init_pgdir(struct pgdir* pgdir)
     memset(pgdir->pt, 0, PAGE_SIZE); 
     init_spinlock(&pgdir->lock);
     init_list_node(&pgdir->section_head);
-    init_sections(&pgdir->section_head);
+    //init_sections(&pgdir->section_head);
     pgdir->online = false;
 }
 
@@ -108,9 +108,37 @@ void attach_pgdir(struct pgdir* pgdir)
  * Useful when pgdir is not the current page table.
  */
 int copyout(struct pgdir* pd, void* va, void *p, usize len){
-    // TODO
+    u64 va_base, ka_base, off, n;
+
+    while (len > 0) {
+        va_base = PAGE_BASE((u64)va);
+        ka_base = P2K(PTE_ADDRESS(*get_pte(pd, va_base, false)));
+        off = (u64)va - va_base;
+        n = PAGE_SIZE - off;
+        if (n > len) {
+            n = len;
+        }
+        memmove((void*)(ka_base + off), p, n);
+        len -= n;
+        p = (void*)((u64)p + n);
+        va = (void*)(va_base + PAGE_SIZE);
+    }
+    return 0;
 }
 
 void vmmap(struct pgdir* pd, u64 va, void* ka, u64 flags) {
     *get_pte(pd, va, true) = K2P(ka) | flags;
+}
+
+void create_stack_section(struct pgdir* pd, u64 va) {
+    struct section* sec = kalloc(sizeof(struct section));
+	sec->flags = 0;
+	sec->begin = va;
+	sec->end = va + PAGE_SIZE;
+	init_sleeplock(&sec->sleeplock);
+	_insert_into_list(&pd->section_head, &sec->stnode);
+
+    void* ka = alloc_page_for_user();
+    memset(ka, 0, PAGE_SIZE);
+    vmmap(pd, va, ka, PTE_USER_DATA);
 }

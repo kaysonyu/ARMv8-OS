@@ -62,13 +62,18 @@ u64 sbrk(i64 size){
 	return origin_end;
 }	
 
+static void create_section(ListNode* section_head, u64 flags) {
+	struct section* section = kalloc(sizeof(struct section));
+	section->flags = flags;
+	section->begin = 0;
+	section->end = 0;
+	init_sleeplock(&section->sleeplock);
+	_insert_into_list(section_head, &section->stnode);
+}
+
 void init_sections(ListNode* section_head) {
-	struct section* heap_section = kalloc(sizeof(struct section));
-	heap_section->flags = ST_HEAP;
-	heap_section->begin = 0;
-	heap_section->end = 0;
-	init_sleeplock(&heap_section->sleeplock);
-	_insert_into_list(section_head, &heap_section->stnode);
+	create_section(section_head, ST_TEXT);
+	create_section(section_head, ST_DATA);
 }
 
 void free_sections(struct pgdir* pd) {
@@ -152,7 +157,7 @@ void swapout(struct pgdir* pd, struct section* st){
 	end = st->end;
 	unalertable_wait_sem(&st->sleeplock);
 	_release_spinlock(&pd->lock);
-	if (st->flags != ST_FILE) {
+	if (!(st->flags & ST_FILE)) {
 		// printk("start:%lld, end:%lld\n", begin, end);
 		for (u64 va = begin; va < end; va += PAGE_SIZE) {
 			// printk("va:%llx, va_: %lld\n", va, *(i64*)va);

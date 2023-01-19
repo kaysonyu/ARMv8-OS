@@ -3,8 +3,14 @@
 #include<aarch64/intrinsic.h>
 #include<kernel/sched.h>
 #include<driver/uart.h>
+#include<common/spinlock.h>
+#include <driver/interrupt.h>
+
 #define INPUT_BUF 128
 struct {
+    SpinLock lock;
+    SleepLock rlock;
+
     char buf[INPUT_BUF];
     usize r;  // Read index
     usize w;  // Write index
@@ -12,15 +18,142 @@ struct {
 } input;
 #define C(x)      ((x) - '@')  // Control-x
 
+extern InodeTree inodes;
 
-isize console_write(Inode *ip, char *buf, isize n) {
-    // TODO
+void console_intr_();
+
+define_init(console) {
+    set_interrupt_handler(IRQ_AUX, console_intr_);
+    input.r = input.w = input.e = 0;
+    init_spinlock(&input.lock);
+    init_sem(&input.rlock, 0);
 }
 
+
+isize console_write(Inode *ip, char *buf, isize n) {
+    if (ip->entry.type != INODE_DEVICE) {
+        return -1;
+    }
+    inodes.unlock(ip);
+
+    _acquire_spinlock(&input.lock);
+    for (int i = 0; i < n; i++) {
+        uart_put_char(buf[i]);
+    }
+    _release_spinlock(&input.lock);
+
+    inodes.lock(ip);
+    return n;
+}
+
+//读取console缓冲区
 isize console_read(Inode *ip, char *dst, isize n) {
-    // TODO
+    char c;
+    isize target = n;
+
+    inodes.unlock(ip);
+
+    _acquire_spinlock(&input.lock);
+    
+    while (n > 0) {
+        while (input.r == input.w) {
+            if (thisproc()->killed) {
+                _release_spinlock(&input.lock);
+                inodes.lock(ip);
+                return -1;
+            }
+            //sleep
+            _lock_sem(&input.rlock);
+            _release_spinlock(&input.lock);
+            ASSERT(_wait_sem(&input.rlock, false));
+
+            _acquire_spinlock(&input.lock);
+        }
+        c = input.buf[input.r++ % INPUT_BUF];
+        if (c == C('D')) {
+            if (n < target) {
+                input.r--;
+            }
+            break;
+        }
+        *dst = c;
+        dst++;
+        n--;
+    }
+    
+    _release_spinlock(&input.lock);
+
+    inodes.lock(ip);
+    return (target - n);
 }
 
 void console_intr(char (*getc)()) {
-    // TODO
+    _acquire_spinlock(&input.lock);
+
+    char c = getc();
+    switch (c) {
+
+        //删除前一个字符
+        case '\b': {
+            if (input.e > input.w) {
+                input.e--;
+                uart_put_char('\b'); 
+                uart_put_char(' '); 
+                uart_put_char('\b');
+            }
+            break;
+        }
+
+        //删除一行
+        case C('U'): {
+            while (input.e > input.w && input.buf[(input.e-1) % INPUT_BUF] != '\n') {
+                input.e--;
+                uart_put_char('\b'); 
+                uart_put_char(' '); 
+                uart_put_char('\b');
+            }
+            break;
+        }
+
+        //更新input.w到input.e
+        case C('D'):
+        case '\n': {
+            if (input.e - input.r >= INPUT_BUF) {
+                break;
+            }
+            input.w = input.e;
+            input.buf[input.e++ % INPUT_BUF] = '\n';
+            uart_put_char('\n');
+            
+            post_all_sem(&input.rlock);
+            break;
+        }
+
+        //杀死当前程序
+        case C('C'): {
+            int ret = kill(thisproc()->pid);
+            ASSERT(ret || true);
+            break;
+        }
+
+        //普通字符写入和回显
+        default: {
+            if (input.e - input.r < INPUT_BUF) {
+                input.buf[input.e++ % INPUT_BUF] = c;
+                uart_put_char(c);
+
+                if (input.e - input.r == INPUT_BUF) {
+                    input.w = input.e;
+                    post_all_sem(&input.rlock);
+                }
+            }
+            break;
+        }
+    }
+
+    _release_spinlock(&input.lock);
+}
+
+void console_intr_() {
+    console_intr(uart_get_char);
 }

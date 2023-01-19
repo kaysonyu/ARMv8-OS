@@ -17,12 +17,11 @@ struct section{
     u64 begin;
     u64 end;
     ListNode stnode;
-    File* fp;  //pointer to file struct
-    u64    offset    //the offset in file
-    u64 length; //the length of mapped content in file
-}
+    // File* fp;  //pointer to file struct
+    // u64 offset;    //the offset in file
+    // u64 length; //the length of mapped content in file
+};
 
-WARN_RESULT void* alloc_page_for_user();
 int pgfault(u64 iss);
 void swapout(struct pgdir* pd, struct section* st);
 void swapin(struct pgdir* pd, struct section* st);

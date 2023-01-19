@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fs/defines.h>
 
 char buf[8192];
 char name[3];
@@ -85,7 +86,7 @@ void writetestbig(void) {
         exit(1);
     }
 
-    for (i = 0; i < INODE_MAX_BLOCKS; i++) {
+    for (i = 0; i <  INODE_MAX_BLOCKS; i++) {
         ((int*)buf)[0] = i;
         if (write(fd, buf, 512) != 512) {
             printf("error: write big file failed\n");

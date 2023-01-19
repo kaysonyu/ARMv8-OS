@@ -9,6 +9,7 @@
 #include <common/list.h>
 
 #define NFILE 65536  // Open files per system
+#define NOFILE 1024 /* open files per process */
 
 typedef struct file {
     enum { FD_NONE, FD_PIPE, FD_INODE } type;
@@ -21,11 +22,12 @@ typedef struct file {
 } File;
 
 struct ftable {
-    // TODO: table of file objects in the system
+    SpinLock lock;
+    struct file file[NFILE];
 };
 
 struct oftable {
-    // TODO: table of opened file descriptors in a process
+    struct file* ofile[NOFILE];
 };
 
 void init_ftable();

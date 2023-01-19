@@ -63,6 +63,7 @@ typedef PTEntry *PTEntriesPtr;
 #define PTE_FLAGS(pte)  ((pte) & 0xFFFF000000000FFF)
 #define P2N(addr) (addr>>12)
 #define PAGE_BASE(addr) (addr & ~(PAGE_SIZE - 1))
+#define PAGE_UP(addr) (((addr) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1))
 
 #define VA_PART0(va) (((u64)(va) & 0xFF8000000000) >> 39)
 #define VA_PART1(va) (((u64)(va) & 0x7FC0000000) >> 30)

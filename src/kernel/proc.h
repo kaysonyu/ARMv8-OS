@@ -16,14 +16,30 @@ enum procstate { UNUSED, RUNNABLE, RUNNING, SLEEPING, DEEPSLEEPING, ZOMBIE };
 typedef struct UserContext
 {
     // TODO: customize your trap frame
+    /*
+    spsr: 保存进程在系统调用之前的状态寄存器。
+    elr: 存储程序在系统调用之前的返回地址。
+    lr: 保存程序在系统调用之前的链接寄存器。
+    sp_el0: 用于存储当前进程在系统调用之前的用户空间栈指针。
+    x[18]: 存储程序在系统调用之前的通用寄存器。
+    q0[2]: 用于存储程序在系统调用之前的128位Q寄存器。
+    tpidr_el0: 用于存储程序在系统调用之前的线程 ID 寄存器。
+    */
+    u64 tpidr_el0;
+    u64 q0[2];
     u64 spsr, elr, lr, sp_el0;
     u64 x[18];
-
+    
 } UserContext;
 
 typedef struct KernelContext
 {
     // TODO: customize your context
+    /*
+    lr：连接寄存器，用于在函数调用返回时存储返回地址。
+    x0 - x1：通用寄存器，可用于存储临时数据。
+    x19-x29：通用寄存器，可用于存储长期数据和调用其他函数时传递参数。
+    */
     u64 lr, x0, x1;
     u64 x[11];  //x19-x29
 

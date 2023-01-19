@@ -6,7 +6,20 @@
 #include <unistd.h>
 
 int main(int argc, char *argv[]) {
-    // TODO
+    int i; 
+
+    if (argc < 2) {
+        fprintf(2, "Usage: mkdir files...\n");
+        exit(1);
+    }
+
+    for (i = 1; i < argc; i++) {
+        if (mkdir(argv[i], 0) < 0) {
+            fprintf(2, "Usage: mkdir files...\n");
+            break;
+        }
+    }
+
     exit(0);
 }
 

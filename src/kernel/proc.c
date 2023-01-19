@@ -6,9 +6,11 @@
 #include <common/string.h>
 #include <kernel/printk.h>
 #include <kernel/container.h>
+#include <kernel/paging.h>
 
 struct proc root_proc;
 extern struct container root_container;
+extern InodeTree inodes;
 
 void kernel_entry();
 void proc_entry();
@@ -244,5 +246,46 @@ define_init(root_proc)
  */
 void trap_return();
 int fork() {
-    /* TODO: Your code here. */
+    int i, pid;
+    struct proc *p = thisproc();
+    struct proc *fork_p = create_proc();
+
+    _for_in_list(node, &p->pgdir.section_head) {
+        if (node == &p->pgdir.section_head)  continue;
+
+        struct section* p_sec = container_of(node, struct section, stnode);
+
+        struct section* c_sec = kalloc(sizeof(struct section));
+        memmove(c_sec, p_sec, sizeof(struct section));
+        init_sleeplock(&c_sec->sleeplock);
+        _insert_into_list(&fork_p->pgdir.section_head, &c_sec->stnode);
+
+        for (u64 va = p_sec->begin; va < p_sec->end; va += PAGE_SIZE) {
+            PTEntriesPtr pte = get_pte(p->pgdir.pt, va, false);
+            u64 flags = PTE_FLAGS(*pte);
+
+            void* ka = alloc_page_for_user();
+            memmove(ka, va, PAGE_SIZE);
+
+            vmmap(fork_p->pgdir.pt, va, ka, flags);
+        }
+    }
+
+    fork_p->parent = p;
+
+    memmove(fork_p->ucontext, p->ucontext, sizeof(UserContext));
+    fork_p->ucontext->x[0] = 0;
+
+    for (int i = 0; i < NOFILE; i++) {
+        if (p->oftable.ofile[i]) {
+            fork_p->oftable.ofile[i] = filedup(p->oftable.ofile[i]);
+        }
+    }
+    fork_p->cwd = inodes.share(p->cwd);
+
+    int pid = fork_p->pid;
+
+    start_proc(fork_p, p->kcontext->x0, p->kcontext->x1);
+
+    return pid;
 }

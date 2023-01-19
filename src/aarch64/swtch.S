@@ -2,7 +2,17 @@
 // x0 (first parameter): new context ptr
 // x1 (second parameter): addr to save old context ptr
 
+/*
+typedef struct KernelContext
+{
+    u64 lr, x0, x1;
+    u64 x[11];  //x19-x29
+} KernelContext;
+*/
+
+//寄存器 a 和 b 的值存储到栈顶地址减去 0x10 字节处，并且将栈指针减去 0x10 个字节。
 #define pushp(a, b) stp a, b, [sp, #-0x10]!
+//从栈顶地址加载 a 和 b 的值，并且将栈指针增加 0x10 个字节
 #define popp(a, b) ldp a, b, [sp], #0x10 
 
 .globl swtch

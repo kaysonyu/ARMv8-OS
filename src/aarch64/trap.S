@@ -1,6 +1,17 @@
 #define pushp(a, b) stp a, b, [sp, #-0x10]!
 #define popp(a, b) ldp a, b, [sp], #0x10 
 
+/*
+typedef struct UserContext
+{
+    u64 tpidr_el0;
+    u64 q0[2];
+    u64 spsr, elr, lr, sp_el0;
+    u64 x[18];
+    
+} UserContext;
+*/
+
 /* `exception_vector.S` send all traps here. */
 .global trap_entry
 trap_entry:
@@ -19,6 +30,10 @@ pushp(x30, x0)
 mrs x0, spsr_el1
 mrs x1, elr_el1
 pushp(x0, x1)
+str q0, [sp, #-0x10]!
+mrs x0, tpidr_el0
+str x0, [sp, #-0x10]!
+
 mov x0, sp
 bl trap_global_handler
 
@@ -26,6 +41,9 @@ bl trap_global_handler
 .global trap_return
 trap_return:
 // TODO
+ldr x0, [sp], #0x10
+msr tpidr_el0, x0
+ldr q0, [sp], #0x10
 popp(x0, x1)
 msr spsr_el1, x0
 msr elr_el1, x1

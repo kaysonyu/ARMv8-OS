@@ -452,8 +452,8 @@ define_syscall(pipe2, int *fd, int flags) {
     fd0 = fdalloc(f0);
     fd1 = fdalloc(f1);
 
-    fd[0] = f0;
-    fd[1] = f1;
+    fd[0] = fd0;
+    fd[1] = fd1;
 
     return 0;
 }
