@@ -119,23 +119,23 @@ struct section* get_heap(struct pgdir* pd) {
 			break;
 		}
 	}
-	ASSERT(heap_section);
 	return heap_section;
 }
 
 void* alloc_page_for_user(){
 	while (left_page_cnt() <= REVERSED_PAGES){ //this is a soft limit
 		//TODO
-		struct proc* swap_proc = get_offline_proc();
-		struct section* heap_section = get_heap(&swap_proc->pgdir);
-		if (swap_proc->pgdir.online || (heap_section->flags & ST_SWAP)) {
-			_release_spinlock(&swap_proc->pgdir.lock);
-			break;
-		}
-		else {
-			swapout(&swap_proc->pgdir, heap_section);
-			break;
-		}
+		// struct proc* swap_proc = get_offline_proc();
+		// struct section* heap_section = get_heap(&swap_proc->pgdir);
+		// if (swap_proc->pgdir.online || (heap_section->flags & ST_SWAP)) {
+		// 	_release_spinlock(&swap_proc->pgdir.lock);
+		// 	break;
+		// }
+		// else {
+		// 	swapout(&swap_proc->pgdir, heap_section);
+		// 	break;
+		// }
+		break;
 	}
 	return kalloc_page();
 }

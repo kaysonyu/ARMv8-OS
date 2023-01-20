@@ -36,6 +36,7 @@ void trap_global_handler(UserContext* context)
         } break;
         case ESR_EC_IABORT_EL0:
         {
+            printk("1\n");
             if (pgfault(iss) < 0)  
                 PANIC();
             break;
@@ -44,12 +45,14 @@ void trap_global_handler(UserContext* context)
             PANIC();
         case ESR_EC_DABORT_EL0:
         {
+            printk("2\n");
             if (pgfault(iss) < 0)  
                 PANIC();
             break;
         }
         case ESR_EC_DABORT_EL1:
         {
+            printk("3\n");
             if (pgfault(iss) < 0)  
                 PANIC();
             break;

@@ -6,10 +6,11 @@
 #include <fs/cache.h>
 #include <fs/defines.h>
 #include <sys/stat.h>
+#include <common/buf.h>
 
 #define ROOT_INODE_NO 1
 
-#define BSIZE         BLOCK_SIZE
+// #define BSIZE         BLOCK_SIZE
 #define IPB           (BSIZE / sizeof(InodeEntry))
 
 struct InodeTree;

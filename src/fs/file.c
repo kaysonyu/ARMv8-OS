@@ -18,6 +18,7 @@ extern BlockCache bcache;
 
 void init_ftable() {
     init_spinlock(&ftable.lock);
+    memset(ftable.file, 0, NFILE*sizeof(struct file));
 }
 
 void init_oftable(struct oftable *oftable) {

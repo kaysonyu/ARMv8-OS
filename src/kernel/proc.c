@@ -195,6 +195,13 @@ void init_proc(struct proc* p)
     p->kstack = kalloc_page();
     p->kcontext = (KernelContext*)((u64)p->kstack + PAGE_SIZE - 16 - sizeof(KernelContext) - sizeof(UserContext));
     p->ucontext = (UserContext*)((u64)p->kstack + PAGE_SIZE - 16 -sizeof(UserContext));
+    init_oftable(&p->oftable);
+    p->cwd = inodes.get(ROOT_INODE_NO);
+    // OpContext ctx_, *ctx;
+    // ctx = &ctx_;
+    // bcache.begin_op(ctx);
+    // p->cwd = namei("/", ctx);
+    // bcache.end_op(ctx);
 }
 
 struct proc* create_proc()

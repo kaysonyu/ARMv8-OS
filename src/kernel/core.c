@@ -4,6 +4,7 @@
 #include <kernel/sched.h>
 #include <test/test.h>
 #include <fs/cache.h>
+#include <driver/sd.h>
 
 bool panic_flag;
 
@@ -24,23 +25,41 @@ NO_RETURN void idle_entry() {
     arch_stop_cpu();
 }
 
+static void create_user_proc() {
+    u64 sz = 0;
+    auto p = create_proc();
+    for (u64 q = (u64)icode; q < (u64)eicode; q += PAGE_SIZE) {
+        vmmap(&p->pgdir, 0x400000 + q - (u64)icode, (void*)q, PTE_USER_DATA);
+        sz += 1;
+    }
+    printk("--size--:%lld\n", sz);
+    ASSERT(p->pgdir.pt);
+    p->ucontext->x[0] = 0;
+    p->ucontext->elr = 0x400000;
+    p->ucontext->spsr = 0;
+    set_parent_to_this(p);
+    set_container_to_this(p);
+    start_proc(p, trap_return, 0);
+}
+
 NO_RETURN void kernel_entry() {
     printk("hello world %d\n", (int)sizeof(struct proc));
     
-    do_rest_init();
+    init_filesystem();
 
     // TODO: map init.S to user space and trap_return to run icode
-    struct proc* p = thisproc();
-    for (u64 q = (u64)icode; q < (u64)eicode; q += PAGE_SIZE) {
-        vmmap(&p->pgdir, 0x400000 + q - (u64)icode, (void*)q, PTE_USER_DATA);
+    create_user_proc();
+    while (1) {
+        yield();
+        if (panic_flag) {
+            break;
+        }
+        arch_with_trap {
+            arch_wfi();
+        }
     }
-    p->ucontext->elr = 0x400000;
-    p->ucontext->spsr = 0;
-
-    arch_tlbi_vmalle1is();
-    trap_return();
-
-    PANIC();
+    set_cpu_off();
+    arch_stop_cpu();
 }
 
 NO_INLINE NO_RETURN void _panic(const char* file, int line) {

@@ -8,7 +8,7 @@
 #include <kernel/container.h>
 #include <fs/file.h>
 
-#define NOFILE 1024 /* open files per process */
+// #define NOFILE 1024 /* open files per process */
 
 enum procstate { UNUSED, RUNNABLE, RUNNING, SLEEPING, DEEPSLEEPING, ZOMBIE };
 
@@ -24,7 +24,7 @@ typedef struct UserContext
     q0[2]: 用于存储程序在系统调用之前的128位Q寄存器。
     tpidr_el0: 用于存储程序在系统调用之前的线程 ID 寄存器。
     */
-    u64 tpidr_el0;
+    u64 tpidr_el0[2];
     u64 q0[2];
     u64 spsr, elr, lr, sp_el0;
     u64 x[18];

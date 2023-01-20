@@ -14,6 +14,7 @@
 #include <fs/inode.h>
 
 #define MAXARG 32
+#define STACK_BASE 0x60000000 
 
 extern InodeTree inodes;
 extern BlockCache bcache;
@@ -32,24 +33,31 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
 	Elf64_Ehdr elf;
 	int i, off;
 	Elf64_Phdr ph;
-	u64 sp, stackbase, sz = 0;
+	u64 sp, stackbase;
 	u64 argc = 0;
+	struct pgdir pd;
+	u64 ustack[MAXARG+2];
+
+	for (u64 p = 0x400000; p < 0x401000; p += PAGE_SIZE) {
+		printk("--p:%llx--*p:%llx--\n", p, *(u64*)p);
+	}
 
 	ASSERT((u64)envp || true);
-
-	//重置页表
-	free_pgdir(&p->pgdir);
-	init_pgdir(&p->pgdir);
-	init_sections(&p->pgdir.section_head);
 
 	bcache.begin_op(ctx);
 
 	//步骤1:从存储在' path '中的文件中加载数据
-	ip = namei(path, ctx);
+	if ((ip = namei(path, ctx)) == NULL) {
+		printk("execve: path invalid");
+		bcache.end_op(ctx);
+		return -1;
+	};
 
 	inodes.lock(ip);
 
-	inodes.read(ip, (u8*)&elf, 0, sizeof(Elf64_Ehdr));
+	if (inodes.read(ip, (u8*)&elf, 0, sizeof(Elf64_Ehdr)) != sizeof(Elf64_Ehdr)) {
+		goto bad;
+	}
 
 	if (strncmp((char*)elf.e_ident, ELFMAG, 4) != 0) {
 		inodes.unlock(ip);
@@ -58,72 +66,143 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
 		return -1;
 	}
 
+	//重置section
+	// free_sections(&p->pgdir);
+	// init_sections(&p->pgdir.section_head);
+
+	init_pgdir(&pd);
+	init_sections(&pd.section_head);
+
 	//步骤2:加载程序头和程序本身
 	for (i = 0, off = elf.e_phoff; i < elf.e_phnum; i++, off += sizeof(Elf64_Phdr)) {
-		inodes.read(ip, (u8*)&ph, off, sizeof(Elf64_Phdr));
+		if ((inodes.read(ip, (u8*)&ph, off, sizeof(Elf64_Phdr))) != sizeof(Elf64_Phdr)) {
+			printk("execve: read phdr fail");
+			goto bad;
+		}
 
 		if (ph.p_type != PT_LOAD)	continue;
 
 		if ((ph.p_flags & PF_R) && (ph.p_flags & PF_X)) {
-			load_seg(&p->pgdir, ph.p_vaddr, ip, ph.p_offset, ph.p_filesz, ST_TEXT);
+			if (load_seg(&pd, ph.p_vaddr, ip, ph.p_offset, ph.p_filesz, ST_TEXT) < 0) {
+				goto bad;
+			}
 		}
 		else if ((ph.p_flags & PF_R) && (ph.p_flags & PF_W)) {
-			load_seg(&p->pgdir, ph.p_vaddr, ip, ph.p_offset, ph.p_filesz, ST_DATA);
-			fill_bss(&p->pgdir, ph.p_vaddr + ph.p_filesz, ph.p_memsz-ph.p_filesz);
+			if (load_seg(&pd, ph.p_vaddr, ip, ph.p_offset, ph.p_filesz, ST_DATA) < 0) {
+				goto bad;
+			}
+			if (fill_bss(&pd, ph.p_vaddr + ph.p_filesz, ph.p_memsz-ph.p_filesz) < 0) {
+				goto bad;
+			}
 		}
 		else {
-			PANIC();
+			goto bad;
 		}
 
-		sz = ph.p_vaddr + ph.p_memsz;
+		// sz = ph.p_vaddr + ph.p_memsz;
 	}
 	
 	inodes.unlock(ip);
 	inodes.put(ctx, ip);
 	bcache.end_op(ctx);
 
+	_for_in_list(node, &pd.section_head) {
+		if (node == &pd.section_head)	continue;
+
+		struct section *sec = container_of(node, struct section, stnode);
+		printk("sec->flags: %llx--sec->begin: %llx, sec->end: %llx\n", sec->flags, sec->begin, sec->end);
+	}
+
 
 	//步骤3:分配和初始化用户栈。
-	stackbase = PAGE_UP(sz);
-	sp = PAGE_UP(sz) + PAGE_SIZE - 32;
-	create_stack_section(&p->pgdir, stackbase);
+	// stackbase = PAGE_UP(sz);
+	stackbase = STACK_BASE;
+	sp = stackbase + PAGE_SIZE - 32;
+	create_stack_section(&pd, stackbase);
 
-	while (argv[argc]) {
-		argc++;
-	}
-
-	if (argc > MAXARG) {
-		goto bad;
-	}
-
-	for (i = argc - 1; i >= 0; i--) {
-		sp -= (strlen(argv[i]) + 1);
-		sp -= (sp % 16);
-
-		if (sp < stackbase) {
-			goto bad;
-		}
-		if (copyout(&p->pgdir, (void*)sp, argv[i], strlen(argv[i]) + 1) < 0) {
-			goto bad;
+	if (argv != NULL) {
+		for (argc = 0; argv[argc]; argc++) {
+			if (argc >= MAXARG) {
+				goto bad;
+			}
+			sp -= (strlen(argv[i]) + 1);
+			sp -= (sp % 16);
+			if (sp < stackbase) {
+				goto bad;
+			}
+			if (copyout(&pd, (void*)sp, argv[argc], strlen(argv[argc]) + 1) < 0) {
+				goto bad;
+			}
+			ustack[argc + 1] = sp;
 		}
 	}
 	
-	sp -= 16;
+	ustack[argc + 1] = 0;
+	ustack[0] = argc;
+
+	sp -= (argc + 2) * sizeof(u64);
+	sp -= sp % 16;
 	if (sp < stackbase) {
 		goto bad;
 	}
-	*(u64*)sp = argc;
+	if (copyout(&pd, (void*)sp, (u64*)ustack, (argc + 2) * sizeof(u64)) < 0) {
+		goto bad;
+	}
 
-	p->ucontext->x[1] = sp;
+	// while (argv[argc]) {
+	// 	argc++;
+	// }
+
+	// if (argc > MAXARG) {
+	// 	goto bad;
+	// }
+
+	// for (i = argc - 1; i >= 0; i--) {
+	// 	sp -= (strlen(argv[i]) + 1);
+	// 	sp -= (sp % 16);
+
+	// 	if (sp < stackbase) {
+	// 		goto bad;
+	// 	}
+	// 	if (copyout(&pd, (void*)sp, argv[i], strlen(argv[i]) + 1) < 0) {
+	// 		goto bad;
+	// 	}
+	// }
+	
+	// sp -= 16;
+	// if (sp < stackbase) {
+	// 	goto bad;
+	// }
+	// *(u64*)sp = argc;
+	
+	free_pgdir(&p->pgdir);
+	memmove(&p->pgdir, &pd, sizeof(struct pgdir));
+
+	u64 f = P2K(PTE_ADDRESS(*get_pte(&p->pgdir, 0x400000, false)));
+
+	printk("verify:%llx\n", f);
+
+	printk("ff:%llx\n", *(u64*)(f|0x14c));
+	// p->ucontext->x[1] = sp;
     p->ucontext->elr = elf.e_entry;
-    p->ucontext->sp_el0 = sp;                  
+    p->ucontext->sp_el0 = sp;  
+
+    init_oftable(&p->oftable); 
+
+    attach_pgdir(&p->pgdir);
+    arch_fence();
     arch_tlbi_vmalle1is();
+	arch_fence();
+   
+	for (u64 i = 0x400000; i < 0x403000; i += PAGE_SIZE) {
+		printk("--p:%llx--*p:%llx--\n", i, *(u64*)i);
+	}
+
     return argc;
 
 bad:
 	printk("exec_bad!\n");
-    if (&p->pgdir)
-        free_pgdir(&p->pgdir);
+    free_pgdir(&pd);
     if (ip) {
         inodes.unlock(ip);
         inodes.put(ctx, ip);
@@ -134,12 +213,14 @@ bad:
 
 //将程序段加载到虚拟地址va的页表中
 static int load_seg(struct pgdir *pd, u64 va, Inode *ip, usize offset, usize sz, u64 flags) {
-	u64 i, n;
+	u64 n;
+	u64 begin, end;
+	u64 p;
+	u64 file_off, page_off;
 
-	if (va % PAGE_SIZE != 0) {
-		printk("load_seg: va must be page aligned\n");
-		return -1;
-	}
+	begin = PAGE_BASE(va);
+	end = PAGE_UP(va + sz);
+	p = begin;
 
 	struct section *target_sec = NULL;
 	_for_in_list(node, &pd->section_head) {
@@ -157,41 +238,40 @@ static int load_seg(struct pgdir *pd, u64 va, Inode *ip, usize offset, usize sz,
 		return -1;
 	}
 
+	target_sec->begin = begin;
+	target_sec->end = end;
+
 	u64 pte_flags = PTE_USER_DATA;
 	pte_flags = (flags & ST_RO) ? (pte_flags | PTE_RO) : (pte_flags | PTE_RW);
+	while (p < end) {
+		file_off = (p < va) ? 0 : (p - va);
+		page_off = (p < va) ? (va - p) : 0;
+		n = (p + PAGE_SIZE > va + sz) ? (va + sz - p - page_off) : (PAGE_SIZE - page_off);
 
-	for (i = 0; i < sz; i+= PAGE_SIZE) {
 		void *ka = alloc_page_for_user();
 		ASSERT(ka);
+		printk("ka:%p\n", ka);
+		vmmap(pd, p, ka, pte_flags);
 
-		vmmap(pd, va + i, ka, pte_flags);
-
-		if (sz - i < PAGE_SIZE) {
-			n = sz -i;
-		}
-		else {
-			n = PAGE_SIZE;
-		}
-
-		if (inodes.read(ip, (u8*)ka, offset + i, n) != n) {
+		if (inodes.read(ip, (u8*)ka + page_off, offset + file_off, n) != n) {
 			return -1;
 		}
-	}
 
-	target_sec->begin = va;
-	target_sec->end = PAGE_UP(va + sz);
+		p += PAGE_SIZE;
+	}
 
 	return 0;
 }
 
 //填充bss段
 static int fill_bss(struct pgdir *pd, u64 va, usize sz) {
-	u64 i;
+	u64 begin, end;
+	u64 p;
+	u64 page_off;
 
-	if (va % PAGE_SIZE != 0) {
-		printk("fill_bss: va must be page aligned\n");
-		return -1;
-	}
+	begin = PAGE_BASE(va);
+	end = PAGE_UP(va + sz);
+	p = begin;
 
 	struct section *target_sec = NULL;
 	_for_in_list(node, &pd->section_head) {
@@ -205,17 +285,26 @@ static int fill_bss(struct pgdir *pd, u64 va, usize sz) {
 	}
 
 	if (target_sec == NULL) {
-		printk("load_seg: corresponding section not exist\n");
+		printk("bss_seg: corresponding section not exist\n");
 		return -1;
 	}
 
-	for (i = 0; i < sz; i += PAGE_SIZE) {
-		void *ka = alloc_page_for_user();
-		ASSERT(ka);
+	target_sec->end = end;
 
-		vmmap(pd, va + i, ka, PTE_USER_DATA);
-
-		memset(ka, 0, PAGE_SIZE);
+	u64 pte_flags = PTE_USER_DATA | PTE_RW;
+	while (p < end) {
+		if (p < va) {
+			page_off = va - p;
+			PTEntriesPtr pte = get_pte(pd, p, false);
+			void *ka = (void*)P2K(PTE_ADDRESS(*pte));
+			memset(ka + page_off, 0, PAGE_SIZE - page_off);
+        }
+		else {
+			void *ka = alloc_page_for_user();
+			vmmap(pd, p, ka, pte_flags);
+			memset(ka, 0, PAGE_SIZE);
+		}
+		p += PAGE_SIZE;
 	}
 
 	return 0;
