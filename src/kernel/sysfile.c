@@ -95,6 +95,7 @@ define_syscall(dup, int fd) {
  * Get the parameters and call fileread.
  */
 define_syscall(read, int fd, char* buffer, int size) {
+    // printk("in read\n");
     struct file* f = fd2file(fd);
     if (!f || size <= 0 || !user_writeable(buffer, size))
         return -1;
@@ -105,6 +106,7 @@ define_syscall(read, int fd, char* buffer, int size) {
  * Get the parameters and call filewrite.
  */
 define_syscall(write, int fd, char* buffer, int size) {
+    printk("in write\n");
     struct file* f = fd2file(fd);
     if (!f || size <= 0 || !user_readable(buffer, size))
         return -1;
@@ -189,6 +191,7 @@ static int isdirempty(Inode* dp) {
 }
 
 define_syscall(unlinkat, int fd, const char* path, int flag) {
+    printk("at unlinkat\n");
     ASSERT(fd == AT_FDCWD && flag == 0);
     Inode *ip, *dp;
     DirEntry de;
@@ -257,12 +260,14 @@ bad:
  * If type is directory, you should additionally handle "." and "..".
  */
 Inode* create(const char* path, short type, short major, short minor, OpContext* ctx) {
+    // printk("at create\n");
     Inode *ip, *dp;
     usize ino;
     char name[FILE_NAME_MAX_LENGTH];
 
-    bcache.begin_op(ctx);
     dp = nameiparent(path, name, ctx);
+    ASSERT(dp->entry.type == INODE_DIRECTORY);
+
     inodes.lock(dp);
 
     ino = inodes.lookup(dp, name, NULL);
@@ -273,15 +278,14 @@ Inode* create(const char* path, short type, short major, short minor, OpContext*
 
         inodes.lock(ip);
         if (type == INODE_REGULAR && (ip->entry.type == INODE_REGULAR || ip->entry.type == INODE_DEVICE)) {
-            bcache.end_op(ctx);
+            inodes.unlock(ip);
             return ip;
         }
         inodes.unlock(ip);
         inodes.put(ctx, ip);
-        bcache.end_op(ctx);
         return 0;
     }
-
+    
     ip = inodes.get(inodes.alloc(ctx, type));
     inodes.lock(ip);
     ip->entry.major = major;
@@ -296,11 +300,11 @@ Inode* create(const char* path, short type, short major, short minor, OpContext*
         inodes.insert(ctx, ip, ".", ip->inode_no);
         inodes.insert(ctx, ip, "..", dp->inode_no);
     }
-
     inodes.insert(ctx, dp, name, ip->inode_no);
-    inodes.unlock(dp);
-    bcache.end_op(ctx);
 
+    inodes.unlock(ip);
+    inodes.unlock(dp);
+    inodes.put(ctx, dp);
     return ip;
 }
 
@@ -308,6 +312,7 @@ define_syscall(openat, int dirfd, const char* path, int omode) {
     int fd;
     struct file* f;
     Inode* ip;
+    // printk("at openat \n");
 
     if (!user_strlen(path, 256))
         return -1;
@@ -354,6 +359,7 @@ define_syscall(openat, int dirfd, const char* path, int omode) {
 }
 
 define_syscall(mkdirat, int dirfd, const char* path, int mode) {
+    printk("at mkdirat \n");
     Inode* ip;
     if (!user_strlen(path, 256))
         return -1;
@@ -378,6 +384,7 @@ define_syscall(mkdirat, int dirfd, const char* path, int mode) {
 }
 
 define_syscall(mknodat, int dirfd, const char* path, int major, int minor) {
+    // printk("at mknodat \n");
     Inode* ip;
     if (!user_strlen(path, 256))
         return -1;
@@ -401,6 +408,7 @@ define_syscall(mknodat, int dirfd, const char* path, int major, int minor) {
 define_syscall(chdir, const char* path) {
     // change the cwd (current working dictionary) of current process to 'path'
     // you may need to do some validations
+    printk("at chdir \n");
     Inode* ip;
     OpContext ctx_, *ctx;
     ctx = &ctx_;

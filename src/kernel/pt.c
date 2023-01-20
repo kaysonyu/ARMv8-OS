@@ -55,8 +55,34 @@ void init_pgdir(struct pgdir* pgdir)
     memset(pgdir->pt, 0, PAGE_SIZE); 
     init_spinlock(&pgdir->lock);
     init_list_node(&pgdir->section_head);
-    //init_sections(&pgdir->section_head);
+    //create_file_sections(&pgdir->section_head);
     pgdir->online = false;
+}
+
+void copy_pgdir(struct pgdir* from_pgdir, struct pgdir* to_pgdir) {
+    _for_in_list(node, &from_pgdir->section_head) {
+        if (node == &from_pgdir->section_head)  continue;
+
+        struct section* from_section = container_of(node, struct section, stnode);
+
+        struct section* to_section = kalloc(sizeof(struct section));
+        to_section->begin = from_section->begin;
+		to_section->end = from_section->end;
+		to_section->flags = from_section->flags;
+        init_sleeplock(&to_section->sleeplock);
+        _insert_into_list(&to_pgdir->section_head, &to_section->stnode);
+
+        for (u64 va = from_section->begin; va < from_section->end; va += PAGE_SIZE) {
+            PTEntriesPtr pte = get_pte(from_pgdir, va, false);
+            u64 flags = PTE_FLAGS(*pte);
+			u64 from_ka = P2K(PTE_ADDRESS(*pte));
+
+            void* ka = alloc_page_for_user();
+            memmove(ka, (void*)from_ka, PAGE_SIZE);
+
+            vmmap(to_pgdir, va, ka, flags);
+        }
+    }
 }
 
 void traverse_free(PTEntriesPtr table, u32 traverse_n) {

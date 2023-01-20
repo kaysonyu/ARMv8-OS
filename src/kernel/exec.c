@@ -26,6 +26,7 @@ static int fill_bss(struct pgdir *pd, u64 va, usize sz);
 extern int fdalloc(struct file* f);
 
 int execve(const char *path, char *const argv[], char *const envp[]) {
+	// printk("in execve\n");
 	struct proc *p = thisproc();
 	OpContext ctx_, *ctx;
 	ctx = &ctx_;
@@ -37,10 +38,6 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
 	u64 argc = 0;
 	struct pgdir pd;
 	u64 ustack[MAXARG+2];
-
-	for (u64 p = 0x400000; p < 0x401000; p += PAGE_SIZE) {
-		printk("--p:%llx--*p:%llx--\n", p, *(u64*)p);
-	}
 
 	ASSERT((u64)envp || true);
 
@@ -68,10 +65,10 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
 
 	//重置section
 	// free_sections(&p->pgdir);
-	// init_sections(&p->pgdir.section_head);
+	// create_file_sections(&p->pgdir.section_head);
 
 	init_pgdir(&pd);
-	init_sections(&pd.section_head);
+	create_file_sections(&pd.section_head);
 
 	//步骤2:加载程序头和程序本身
 	for (i = 0, off = elf.e_phoff; i < elf.e_phnum; i++, off += sizeof(Elf64_Phdr)) {
@@ -86,6 +83,7 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
 			if (load_seg(&pd, ph.p_vaddr, ip, ph.p_offset, ph.p_filesz, ST_TEXT) < 0) {
 				goto bad;
 			}
+			// printk("phvaddr: %llx--max: %llx\n", (u64)ph.p_vaddr, (u64)ph.p_vaddr+ph.p_memsz);
 		}
 		else if ((ph.p_flags & PF_R) && (ph.p_flags & PF_W)) {
 			if (load_seg(&pd, ph.p_vaddr, ip, ph.p_offset, ph.p_filesz, ST_DATA) < 0) {
@@ -94,6 +92,7 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
 			if (fill_bss(&pd, ph.p_vaddr + ph.p_filesz, ph.p_memsz-ph.p_filesz) < 0) {
 				goto bad;
 			}
+			// printk("phvaddr: %llx--max: %llx\n", (u64)ph.p_vaddr, (u64)ph.p_vaddr+ph.p_memsz);
 		}
 		else {
 			goto bad;
@@ -106,14 +105,6 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
 	inodes.put(ctx, ip);
 	bcache.end_op(ctx);
 
-	_for_in_list(node, &pd.section_head) {
-		if (node == &pd.section_head)	continue;
-
-		struct section *sec = container_of(node, struct section, stnode);
-		printk("sec->flags: %llx--sec->begin: %llx, sec->end: %llx\n", sec->flags, sec->begin, sec->end);
-	}
-
-
 	//步骤3:分配和初始化用户栈。
 	// stackbase = PAGE_UP(sz);
 	stackbase = STACK_BASE;
@@ -125,7 +116,7 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
 			if (argc >= MAXARG) {
 				goto bad;
 			}
-			sp -= (strlen(argv[i]) + 1);
+			sp -= (strlen(argv[argc]) + 1);
 			sp -= (sp % 16);
 			if (sp < stackbase) {
 				goto bad;
@@ -176,14 +167,11 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
 	// *(u64*)sp = argc;
 	
 	free_pgdir(&p->pgdir);
-	memmove(&p->pgdir, &pd, sizeof(struct pgdir));
+	init_pgdir(&p->pgdir);
+	copy_pgdir(&pd, &p->pgdir);
 
-	u64 f = P2K(PTE_ADDRESS(*get_pte(&p->pgdir, 0x400000, false)));
+	free_pgdir(&pd);
 
-	printk("verify:%llx\n", f);
-
-	printk("ff:%llx\n", *(u64*)(f|0x14c));
-	// p->ucontext->x[1] = sp;
     p->ucontext->elr = elf.e_entry;
     p->ucontext->sp_el0 = sp;  
 
@@ -192,12 +180,9 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
     attach_pgdir(&p->pgdir);
     arch_fence();
     arch_tlbi_vmalle1is();
-	arch_fence();
-   
-	for (u64 i = 0x400000; i < 0x403000; i += PAGE_SIZE) {
-		printk("--p:%llx--*p:%llx--\n", i, *(u64*)i);
-	}
 
+	// printk("exec end\n");
+   
     return argc;
 
 bad:
@@ -250,7 +235,6 @@ static int load_seg(struct pgdir *pd, u64 va, Inode *ip, usize offset, usize sz,
 
 		void *ka = alloc_page_for_user();
 		ASSERT(ka);
-		printk("ka:%p\n", ka);
 		vmmap(pd, p, ka, pte_flags);
 
 		if (inodes.read(ip, (u8*)ka + page_off, offset + file_off, n) != n) {

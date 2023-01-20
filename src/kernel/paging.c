@@ -62,16 +62,17 @@ u64 sbrk(i64 size){
 	return origin_end;
 }	
 
-static void create_section(ListNode* section_head, u64 flags) {
+struct section* create_section(ListNode* section_head, u64 flags) {
 	struct section* section = kalloc(sizeof(struct section));
 	section->flags = flags;
 	section->begin = 0;
 	section->end = 0;
 	init_sleeplock(&section->sleeplock);
 	_insert_into_list(section_head, &section->stnode);
+	return section;
 }
 
-void init_sections(ListNode* section_head) {
+void create_file_sections(ListNode* section_head) {
 	create_section(section_head, ST_TEXT);
 	create_section(section_head, ST_DATA);
 }
@@ -202,7 +203,7 @@ int pgfault(u64 iss){
 	struct proc* p = thisproc();
 	struct pgdir* pd = &p->pgdir;
 	u64 addr = arch_get_far();
-	// printk("addr: %llx\n", addr);
+	printk("addr: %llx\n", addr);
 	//TODO
 
 	struct section* find_section = get_heap(pd);

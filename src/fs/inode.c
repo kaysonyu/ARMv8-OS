@@ -503,6 +503,7 @@ static Inode* namex(const char* path,
         inode_put(ctx, target_inode);
         return NULL;
     }
+
     return target_inode;
 }
 

@@ -42,6 +42,7 @@ NO_RETURN void exit(int code)
     // 4. notify the parent
     // 5. sched(ZOMBIE)
     // NOTE: be careful of concurrency
+    printk("in exit\n");
     _acquire_spinlock(&plock);
     auto this = thisproc();
     ASSERT(this != this->container->rootproc && !this->idle);
@@ -63,7 +64,22 @@ NO_RETURN void exit(int code)
             post_sem(&rootproc->childexit);
         }
     }
-    // _release_spinlock(&plock);
+    
+    for (int fd = 0; fd < NOFILE; fd++) {
+        if (this->oftable.ofile[fd]) {
+            fileclose(this->oftable.ofile[fd]);
+            this->oftable.ofile[fd] = 0;
+        }
+    }
+    if (this->cwd) {
+        OpContext ctx_, *ctx = &ctx_;
+        bcache.begin_op(ctx);
+        inodes.put(ctx, this->cwd);
+        bcache.end_op(ctx);
+
+        this->cwd = 0;
+    }
+
     post_sem(&(this -> parent ->childexit));
     _acquire_sched_lock();
     _release_spinlock(&plock);
@@ -196,12 +212,7 @@ void init_proc(struct proc* p)
     p->kcontext = (KernelContext*)((u64)p->kstack + PAGE_SIZE - 16 - sizeof(KernelContext) - sizeof(UserContext));
     p->ucontext = (UserContext*)((u64)p->kstack + PAGE_SIZE - 16 -sizeof(UserContext));
     init_oftable(&p->oftable);
-    p->cwd = inodes.get(ROOT_INODE_NO);
-    // OpContext ctx_, *ctx;
-    // ctx = &ctx_;
-    // bcache.begin_op(ctx);
-    // p->cwd = namei("/", ctx);
-    // bcache.end_op(ctx);
+    p->cwd = inodes.root;
 }
 
 struct proc* create_proc()
@@ -260,10 +271,13 @@ int fork() {
     fork_p->killed = p->killed;
     fork_p->idle = p->idle;
 
+    copy_pgdir(&p->pgdir, &fork_p->pgdir);
+
     set_parent_to_this(fork_p);
     set_container_to_this(fork_p);
 
     memmove(fork_p->ucontext, p->ucontext, sizeof(UserContext));
+    memmove(fork_p->kcontext, p->kcontext, sizeof(KernelContext));
     fork_p->ucontext->x[0] = 0;
 
     for (int i = 0; i < NOFILE; i++) {
@@ -274,31 +288,38 @@ int fork() {
     if (fork_p->cwd) {
         fork_p->cwd = inodes.share(p->cwd);
     }
-
-    _for_in_list(node, &p->pgdir.section_head) {
-        if (node == &p->pgdir.section_head)  continue;
-
-        struct section* p_sec = container_of(node, struct section, stnode);
-
-        struct section* c_sec = kalloc(sizeof(struct section));
-        memmove(c_sec, p_sec, sizeof(struct section));
-        init_sleeplock(&c_sec->sleeplock);
-        _insert_into_list(&fork_p->pgdir.section_head, &c_sec->stnode);
-
-        for (u64 va = p_sec->begin; va < p_sec->end; va += PAGE_SIZE) {
-            PTEntriesPtr pte = get_pte(&p->pgdir, va, false);
-            u64 flags = PTE_FLAGS(*pte);
-
-            void* ka = alloc_page_for_user();
-            memmove(ka, (void*)va, PAGE_SIZE);
-
-            vmmap(&fork_p->pgdir, va, ka, flags);
-        }
+    else {
+        fork_p->cwd = NULL;
     }
+
+    // _for_in_list(node, &p->pgdir.section_head) {
+    //     if (node == &p->pgdir.section_head)  continue;
+
+    //     struct section* p_sec = container_of(node, struct section, stnode);
+
+    //     struct section* c_sec = kalloc(sizeof(struct section));
+    //     memmove(c_sec, p_sec, sizeof(struct section));
+    //     init_sleeplock(&c_sec->sleeplock);
+    //     _insert_into_list(&fork_p->pgdir.section_head, &c_sec->stnode);
+
+    //     printk("psec:%llx\n", p_sec->flags);
+    //     for (u64 va = p_sec->begin; va < p_sec->end; va += PAGE_SIZE) {
+    //         printk("va:%llx\n", va);
+    //         PTEntriesPtr pte = get_pte(&p->pgdir, va, false);
+    //         u64 flags = PTE_FLAGS(*pte);
+
+    //         void* ka = alloc_page_for_user();
+    //         memmove(ka, (void*)va, PAGE_SIZE);
+
+    //         vmmap(&fork_p->pgdir, va, ka, flags);
+    //     }
+    // }
 
     pid = fork_p->pid;
 
     start_proc(fork_p, trap_return, 0);
+
+    // printk("fork end, pid: %d\n", pid);
 
     return pid;
 }

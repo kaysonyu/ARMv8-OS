@@ -2,6 +2,7 @@
 #include <kernel/printk.h>
 #include <kernel/init.h>
 #include <kernel/sched.h>
+#include <kernel/paging.h>
 #include <test/test.h>
 #include <fs/cache.h>
 #include <driver/sd.h>
@@ -26,13 +27,13 @@ NO_RETURN void idle_entry() {
 }
 
 static void create_user_proc() {
-    u64 sz = 0;
     auto p = create_proc();
     for (u64 q = (u64)icode; q < (u64)eicode; q += PAGE_SIZE) {
         vmmap(&p->pgdir, 0x400000 + q - (u64)icode, (void*)q, PTE_USER_DATA);
-        sz += 1;
     }
-    printk("--size--:%lld\n", sz);
+    struct section* section = create_section(&p->pgdir.section_head, ST_TEXT);
+    section->begin = PAGE_BASE((u64)icode);
+    section->end = PAGE_UP((u64)eicode);
     ASSERT(p->pgdir.pt);
     p->ucontext->x[0] = 0;
     p->ucontext->elr = 0x400000;

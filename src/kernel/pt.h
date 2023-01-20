@@ -20,3 +20,4 @@ void free_pgdir(struct pgdir* pgdir);
 void attach_pgdir(struct pgdir* pgdir);
 int copyout(struct pgdir* pd, void* va, void *p, usize len);
 void create_stack_section(struct pgdir* pd, u64 va);
+void copy_pgdir(struct pgdir* from_pgdir, struct pgdir* to_pgdir);

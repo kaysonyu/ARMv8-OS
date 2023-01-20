@@ -13,6 +13,7 @@ void syscall_entry(UserContext* context)
     // Invoke syscall_table[id] with args and set the return value.
     // id is stored in x8. args are stored in x0-x5. return value is stored in x0.
     u64 id = context -> x[8];
+    // printk("system_id: %lld\n", id);
     if (id < NR_SYSCALL) {
         if (syscall_table[id] == NULL) PANIC();
 
@@ -55,7 +56,7 @@ bool user_writeable(const void* start, usize size) {
         if (pte == NULL) {
             return false;
         }
-        if (!(*pte & PTE_USER_DATA) || !(*pte & PTE_RO)) {
+        if (!(*pte & PTE_USER_DATA) || (*pte & PTE_RO)) {
             return false;
         }
         n = PAGE_SIZE - (va - va_base);

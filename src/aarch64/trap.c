@@ -34,28 +34,34 @@ void trap_global_handler(UserContext* context)
         {
             syscall_entry(context);
         } break;
-        case ESR_EC_IABORT_EL0:
-        {
-            printk("1\n");
-            if (pgfault(iss) < 0)  
-                PANIC();
-            break;
-        }
+        // case ESR_EC_IABORT_EL0:
+        // {
+        //     if (pgfault(iss) < 0)  
+        //         PANIC();
+        //     break;
+        // }
         case ESR_EC_IABORT_EL1:
             PANIC();
+        // case ESR_EC_DABORT_EL0:
+        // {
+        //     if (pgfault(iss) < 0)  
+        //         PANIC();
+        //     break;
+        // }
+        case ESR_EC_IABORT_EL0:
         case ESR_EC_DABORT_EL0:
-        {
-            printk("2\n");
-            if (pgfault(iss) < 0)  
-                PANIC();
-            break;
-        }
         case ESR_EC_DABORT_EL1:
         {
-            printk("3\n");
-            if (pgfault(iss) < 0)  
-                PANIC();
+            // if (pgfault(iss) < 0)  
+            //     PANIC();
+            // break;
+            u64 addr = arch_get_far();
+	        printk("pgfault_addr: %llx\n", addr);
+            printk("esr:%llx\n", esr);
+            printk("elr:%llx\n", context->elr);
+            PANIC();
             break;
+
         }
         default:
         {

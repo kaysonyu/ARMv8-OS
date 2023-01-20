@@ -238,12 +238,10 @@ static void update_this_proc(struct proc* p)
 static void simple_sched(enum procstate new_state)
 {
     auto this = thisproc();
-    // printk("ppp\n");
     if (this -> killed && new_state != ZOMBIE) {
         _release_sched_lock();
         return;
     }
-    // printk("ppp\n");
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
     auto next = pick_next();

@@ -10,6 +10,7 @@
 #include <fs/pipe.h>
 #include <kernel/sched.h>
 #include <common/string.h>
+#include <kernel/printk.h>
 #include "fs.h"
 
 static struct ftable ftable;
