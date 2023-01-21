@@ -9,39 +9,31 @@ char buf[512];
 
 void cat(int fd) {
     int n;
-    while (n = read(fd, buf, sizeof(buf)) > 0) {
-        if (write(1, buf, n) != n) {
-            fprintf(2, "cat: write error\n");
+    while ((n = read(fd, buf, sizeof(buf))) > 0) {
+        if (write(STDOUT_FILENO, buf, n) != n) {
+            printf("cat: write error\n");
             exit(1);
         }
     }
-
     if (n < 0) {
-        fprintf(2, "cat: read error\n");
+        printf("cat: read error\n");
         exit(1);
     }
 }
 
 int main(int argc, char *argv[]) {
-    int fd, i;
-
     if (argc <= 1) {
-        cat(0);
+        printf("cat: no arguments\n");
         exit(0);
     }
-
-    for (i = 1; i < argc; i++) {
-        fd = open(argv[i], 0);
+    for (int i = 1; i < argc; i++) {
+        int fd = open(argv[i], 0);
         if (fd < 0) {
-            fprintf(2, "cat: %s open error\n", argv[i]);
-            exit(1);
+            printf("cat: open file %s fail\n", argv[i]);
+            continue;
         }
-
         cat(fd);
         close(fd);
     }
     exit(0);
 }
-
-
-

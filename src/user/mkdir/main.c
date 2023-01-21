@@ -9,13 +9,13 @@ int main(int argc, char *argv[]) {
     int i; 
 
     if (argc < 2) {
-        fprintf(2, "Usage: mkdir files...\n");
+        printf("mkdir: no argument");
         exit(1);
     }
 
     for (i = 1; i < argc; i++) {
         if (mkdir(argv[i], 0) < 0) {
-            fprintf(2, "Usage: mkdir files...\n");
+            printf("mkdir: fail\n");
             break;
         }
     }

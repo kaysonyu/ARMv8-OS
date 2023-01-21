@@ -31,8 +31,8 @@ pushp(x7, x8)
 pushp(x5, x6)
 pushp(x3, x4)
 pushp(x1, x2)
-mrs x1, tpidr_el0
-pushp(x1, x0)
+mrs x12, tpidr_el0
+pushp(x12, x0)
 str q0, [sp, #-0x10]!
 mrs x0, sp_el0
 pushp(x30, x0)
@@ -54,8 +54,8 @@ msr elr_el1, x1
 popp(x30, x0)
 msr sp_el0, x0
 ldr q0, [sp], #0x10
-popp(x1, x0)
-msr tpidr_el0, x1
+popp(x12, x0)
+msr tpidr_el0, x12
 popp(x1, x2)
 popp(x3, x4)
 popp(x5, x6)

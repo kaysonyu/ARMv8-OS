@@ -23,7 +23,7 @@ extern InodeTree inodes;
 
 void console_intr_();
 
-define_init(console) {
+define_rest_init(console) {
     input.r = 0;
     input.w = 0; 
     input.e = 0;
@@ -34,6 +34,7 @@ define_init(console) {
 
 
 isize console_write(Inode *ip, char *buf, isize n) {
+    // printk("in console_write\n");
     if (ip->entry.type != INODE_DEVICE) {
         return -1;
     }
@@ -42,6 +43,7 @@ isize console_write(Inode *ip, char *buf, isize n) {
     _acquire_spinlock(&input.lock);
     for (int i = 0; i < n; i++) {
         uart_put_char(buf[i]);
+        
     }
     _release_spinlock(&input.lock);
 
@@ -51,6 +53,7 @@ isize console_write(Inode *ip, char *buf, isize n) {
 
 //读取console缓冲区
 isize console_read(Inode *ip, char *dst, isize n) {
+    // printk("in console_read\n");
     char c;
     isize target = n;
 
@@ -73,8 +76,7 @@ isize console_read(Inode *ip, char *dst, isize n) {
             bool ret = _wait_sem(&input.rlock, false);
             ASSERT(ret || true);
 
-
-            _acquire_spinlock(&input.lock);
+            // _acquire_spinlock(&input.lock);
         }
         c = input.buf[input.r++ % INPUT_BUF];
         if (c == C('D')) {
@@ -97,17 +99,18 @@ isize console_read(Inode *ip, char *dst, isize n) {
 }
 
 void console_intr(char (*getc)()) {
+    // printk("in console_intr\n");
     _acquire_spinlock(&input.lock);
     
-    while (1) {
-        char c = getc();
-        if (c == '\0')
-            break;
-        
+    char c = getc();
+    // if (c == '\0')
+    //     break;
+    if (c != '\0') {
         switch (c) {
 
             //删除前一个字符
-            case '\b': {
+            case '\b':
+            case '\x7f': {
                 if (input.e > input.w) {
                     input.e--;
                     uart_put_char('\b'); 
@@ -128,20 +131,6 @@ void console_intr(char (*getc)()) {
                 break;
             }
 
-            //更新input.w到input.e
-            case C('D'):
-            case '\n': {
-                if (input.e - input.r >= INPUT_BUF) {
-                    break;
-                }
-                input.w = input.e;
-                input.buf[input.e++ % INPUT_BUF] = '\n';
-                uart_put_char('\n');
-                
-                post_all_sem(&input.rlock);
-                break;
-            }
-
             //杀死当前程序
             case C('C'): {
                 int ret = kill(thisproc()->pid);
@@ -152,10 +141,11 @@ void console_intr(char (*getc)()) {
             //普通字符写入和回显
             default: {
                 if (input.e - input.r < INPUT_BUF) {
+                    c = (c == '\r') ? '\n' : c;
                     input.buf[input.e++ % INPUT_BUF] = c;
                     uart_put_char(c);
 
-                    if (input.e - input.r == INPUT_BUF) {
+                    if (c == '\n' || c == C('D') || input.e - input.r == INPUT_BUF) {
                         input.w = input.e;
                         post_all_sem(&input.rlock);
                     }
@@ -163,9 +153,10 @@ void console_intr(char (*getc)()) {
                 break;
             }
         }
-
     }
     
+
+    // }
 
     _release_spinlock(&input.lock);
 }

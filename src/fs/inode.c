@@ -255,6 +255,7 @@ static usize inode_read(Inode* inode, u8* dest, usize offset, usize count) {
     InodeEntry* entry = &inode->entry;
     if (inode->entry.type == INODE_DEVICE) {
         ASSERT(inode->entry.major == 1);
+        // printk("inode->entry.type == INODE_DEVICE\n");
         return console_read(inode, (char*)dest, count);
     }
     if (count + offset > entry->num_bytes)

@@ -99,6 +99,7 @@ define_syscall(read, int fd, char* buffer, int size) {
     struct file* f = fd2file(fd);
     if (!f || size <= 0 || !user_writeable(buffer, size))
         return -1;
+    // printk("to fileread\n");
     return fileread(f, buffer, size);
 }
 
@@ -106,7 +107,7 @@ define_syscall(read, int fd, char* buffer, int size) {
  * Get the parameters and call filewrite.
  */
 define_syscall(write, int fd, char* buffer, int size) {
-    printk("in write\n");
+    // printk("in write\n");
     struct file* f = fd2file(fd);
     if (!f || size <= 0 || !user_readable(buffer, size))
         return -1;
@@ -191,7 +192,7 @@ static int isdirempty(Inode* dp) {
 }
 
 define_syscall(unlinkat, int fd, const char* path, int flag) {
-    printk("at unlinkat\n");
+    // printk("at unlinkat\n");
     ASSERT(fd == AT_FDCWD && flag == 0);
     Inode *ip, *dp;
     DirEntry de;
@@ -281,6 +282,7 @@ Inode* create(const char* path, short type, short major, short minor, OpContext*
             inodes.unlock(ip);
             return ip;
         }
+        printk("mkdir: cannot create directory, File exists\n");
         inodes.unlock(ip);
         inodes.put(ctx, ip);
         return 0;
@@ -375,7 +377,7 @@ define_syscall(mkdirat, int dirfd, const char* path, int mode) {
     bcache.begin_op(&ctx);
     if ((ip = create(path, INODE_DIRECTORY, 0, 0, &ctx)) == 0) {
         bcache.end_op(&ctx);
-        return -1;
+        return 0;
     }
     inodes.unlock(ip);
     inodes.put(&ctx, ip);
@@ -408,7 +410,7 @@ define_syscall(mknodat, int dirfd, const char* path, int major, int minor) {
 define_syscall(chdir, const char* path) {
     // change the cwd (current working dictionary) of current process to 'path'
     // you may need to do some validations
-    printk("at chdir \n");
+    // printk("at chdir \n");
     Inode* ip;
     OpContext ctx_, *ctx;
     ctx = &ctx_;

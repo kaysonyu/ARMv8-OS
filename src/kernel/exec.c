@@ -45,7 +45,7 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
 
 	//步骤1:从存储在' path '中的文件中加载数据
 	if ((ip = namei(path, ctx)) == NULL) {
-		printk("execve: path invalid");
+		printk("execve: path invalid\n");
 		bcache.end_op(ctx);
 		return -1;
 	};
@@ -174,8 +174,6 @@ int execve(const char *path, char *const argv[], char *const envp[]) {
 
     p->ucontext->elr = elf.e_entry;
     p->ucontext->sp_el0 = sp;  
-
-    init_oftable(&p->oftable); 
 
     attach_pgdir(&p->pgdir);
     arch_fence();

@@ -95,10 +95,13 @@ isize fileread(struct file* f, char* addr, isize n) {
     if (f->readable == 0) {
         return -1;
     }
+    // printk("fileread\n");
     if (f->type == FD_PIPE) {
+        // printk("FD_PIPE\n");
         r = pipeRead(f->pipe, (u64)addr, n);
     }
     else if (f->type == FD_INODE) {
+        // printk("FD_INODE\n");
         inodes.lock(f->ip);
         r = inodes.read(f->ip, (u8*)addr, f->off, n);
         if (r > 0) {

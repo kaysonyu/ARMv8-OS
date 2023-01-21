@@ -245,6 +245,7 @@ static void simple_sched(enum procstate new_state)
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
     auto next = pick_next();
+    // printk("this_pid:%d, next_pid:%d\n", this->pid, next->pid);
     update_this_proc(next);
     ASSERT(next->state == RUNNABLE);
     next->state = RUNNING;

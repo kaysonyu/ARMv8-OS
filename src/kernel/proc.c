@@ -42,7 +42,6 @@ NO_RETURN void exit(int code)
     // 4. notify the parent
     // 5. sched(ZOMBIE)
     // NOTE: be careful of concurrency
-    printk("in exit\n");
     _acquire_spinlock(&plock);
     auto this = thisproc();
     ASSERT(this != this->container->rootproc && !this->idle);

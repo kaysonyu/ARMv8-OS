@@ -46,7 +46,7 @@ static void create_user_proc() {
 NO_RETURN void kernel_entry() {
     printk("hello world %d\n", (int)sizeof(struct proc));
     
-    init_filesystem();
+    do_rest_init();
 
     // TODO: map init.S to user space and trap_return to run icode
     create_user_proc();
