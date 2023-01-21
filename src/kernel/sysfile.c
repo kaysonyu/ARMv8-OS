@@ -361,7 +361,7 @@ define_syscall(openat, int dirfd, const char* path, int omode) {
 }
 
 define_syscall(mkdirat, int dirfd, const char* path, int mode) {
-    printk("at mkdirat \n");
+    // printk("at mkdirat \n");
     Inode* ip;
     if (!user_strlen(path, 256))
         return -1;
